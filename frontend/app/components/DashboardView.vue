@@ -12,6 +12,7 @@ import NewsBrief from './NewsBrief.vue'
 import AppsDock from './AppsDock.vue'
 import TerminalApp from './TerminalApp.vue'
 import DevMode from './DevMode.vue'
+import ComputerUse from './ComputerUse.vue'
 import type { Brief } from '../composables/useBrief'
 import type { NewsItem } from '../composables/useNews'
 import type { OlwenTask, ReviewResult } from '../composables/useTasks'
@@ -140,6 +141,10 @@ const devModeOpen = ref(false)
 function enterDevMode() { devModeOpen.value = true }
 function exitDevMode() { devModeOpen.value = false }
 
+// Computer Use — Olwen drives the user's mouse + keyboard via olwen-bridge
+const computerUseOpen = ref(false)
+function exitComputerUse() { computerUseOpen.value = false }
+
 // Terminal launched by an agent UI action (so we can pass cwd / autoStart)
 const agentTerminal = ref<{ cwd: string | null; command: string | null } | null>(null)
 
@@ -159,6 +164,7 @@ watch(() => olwen.lastUiAction.value, (val) => {
       break
     }
     case 'open_dev_mode':           devModeOpen.value = true; break
+    case 'open_computer_use':       computerUseOpen.value = true; break
     case 'open_settings': {
       const sec = (a.section as string) || 'connections'
       useState<string>('settings:section', () => 'connections').value = sec
@@ -349,6 +355,13 @@ const priorityColor: Record<string, string> = {
             <polyline points="8 5 3 12 8 19" /><polyline points="16 5 21 12 16 19" />
           </svg>
         </button>
+        <button class="iconbtn iconbtn--cu" title="Give Olwen the wheel — control mouse & keyboard" @click="computerUseOpen = true">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="13" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+            <path d="M9 9l3 3 5-5" />
+          </svg>
+        </button>
         <button class="iconbtn" title="Run morning brief" :disabled="briefLoading" @click="runBriefNow">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v3M4.5 4.5l2.1 2.1M2 12h3M4.5 19.5l2.1-2.1M12 22v-3M19.5 19.5l-2.1-2.1M22 12h-3M19.5 4.5l-2.1 2.1" />
@@ -520,6 +533,11 @@ const priorityColor: Record<string, string> = {
 
     <!-- Dev mode focus environment (full-screen overlay) -->
     <DevMode v-if="devModeOpen" @close="exitDevMode" />
+
+    <!-- Computer Use — Olwen drives the OS-level mouse/keyboard via olwen-bridge -->
+    <div v-if="computerUseOpen" class="cu-overlay" role="dialog" aria-label="Computer Use">
+      <ComputerUse @close="exitComputerUse" />
+    </div>
   </div>
 </template>
 
@@ -612,6 +630,27 @@ const priorityColor: Record<string, string> = {
   transition: all .2s ease;
 }
 .iconbtn:hover { color: #5EEAD4; border-color: #5EEAD4; }
+.iconbtn--cu { color: rgba(167,243,208,0.85); border-color: rgba(94,234,212,0.35); }
+.iconbtn--cu:hover { color: #02060A; background: linear-gradient(135deg, #A7F3D0, #5EEAD4); border-color: transparent; }
+
+/* Computer-Use full-screen overlay */
+.cu-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(2,6,10,0.86);
+  backdrop-filter: blur(20px);
+  display: flex; align-items: stretch; justify-content: center;
+  padding: 32px;
+  animation: cuOverlayIn .25s ease;
+}
+.cu-overlay > * {
+  width: min(960px, 100%);
+  max-height: 100%;
+  border-radius: 18px;
+  border: 0.5px solid rgba(94,234,212,0.18);
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,0.6);
+  overflow: hidden;
+}
+@keyframes cuOverlayIn { from { opacity: 0; } to { opacity: 1; } }
 .userpill {
   display: flex; align-items: center; gap: 8px;
   padding: 5px 8px 5px 12px; border-radius: 999px;

@@ -64,6 +64,18 @@ class Settings(BaseSettings):
     github_redirect_uri: str = "http://localhost:8000/api/github/oauth/callback"
     github_post_oauth_redirect: str = "http://localhost:3100/?settings=connections&github=1"
 
+    # Olwen Bridge — local daemon that controls mouse/keyboard/screen on the
+    # user's own device. Lives at 127.0.0.1; never accept a non-loopback URL
+    # in production. Token is read from a 0600 file the bridge writes at
+    # install time.
+    bridge_url: str = "http://127.0.0.1:8765"
+    bridge_token_path: str = "~/.olwen/bridge.token"
+    # Computer-use safety: max number of model→bridge action steps per task.
+    # Prevents a runaway loop from chewing through your API budget or your
+    # screen for an hour. 25 is enough for most real tasks.
+    computer_use_max_steps: int = 25
+    computer_use_model: str = "claude-sonnet-4-6"
+
     # Email OTP (signup verification)
     otp_expire_minutes: int = 10
     otp_max_attempts: int = 5

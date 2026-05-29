@@ -11,6 +11,7 @@ from app.api.routes import (
     brief as brief_routes,
     calendar as calendar_routes,
     chat,
+    computer as computer_routes,
     email as email_routes,
     github as github_routes,
     health,
@@ -61,6 +62,7 @@ app.include_router(brief_routes.router, prefix="/api/brief", tags=["brief"])
 app.include_router(strava_routes.router, prefix="/api/strava", tags=["strava"])
 app.include_router(apps_routes.router, prefix="/api/apps", tags=["apps"])
 app.include_router(devmode_routes.router, prefix="/api/devmode", tags=["devmode"])
+app.include_router(computer_routes.router, prefix="/api/computer", tags=["computer"])
 
 
 @app.get("/")
