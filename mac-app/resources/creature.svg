@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 440" width="400" height="440" role="img" aria-label="Olwen">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="48%" r="60%">
+      <stop offset="0%" stop-color="#06121A"/>
+      <stop offset="100%" stop-color="#02060A"/>
+    </radialGradient>
+
+    <radialGradient id="c-body" cx="50%" cy="40%" r="55%">
+      <stop offset="0%"   stop-color="#ECFEFF" stop-opacity="0.95"/>
+      <stop offset="25%"  stop-color="#67E8F9" stop-opacity="0.6"/>
+      <stop offset="60%"  stop-color="#0891B2" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#164E63" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="c-inner" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#A7F3D0" stop-opacity="0.7"/>
+      <stop offset="50%"  stop-color="#5EEAD4" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="c-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#5EEAD4" stop-opacity="0.35"/>
+      <stop offset="50%"  stop-color="#22D3EE" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="c-tendril" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#67E8F9" stop-opacity="0.95"/>
+      <stop offset="55%"  stop-color="#22D3EE" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#0E7490" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="c-tendril-bright" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#A7F3D0" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="c-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5"/>
+      <feComposite in="SourceGraphic" operator="over"/>
+    </filter>
+    <filter id="c-organic">
+      <feGaussianBlur stdDeviation="0.8"/>
+    </filter>
+  </defs>
+
+  <!-- dark backdrop so the creature reads on any README background -->
+  <rect width="400" height="440" fill="url(#bg)"/>
+
+  <!-- atmospheric halo -->
+  <circle cx="200" cy="195" r="135" fill="url(#c-halo)">
+    <animate attributeName="r" values="132;140;132" dur="6s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- mist clouds beneath -->
+  <ellipse cx="135" cy="350" rx="105" ry="42" fill="url(#c-inner)" opacity="0.35"/>
+  <ellipse cx="285" cy="320" rx="90"  ry="34" fill="url(#c-inner)" opacity="0.3"/>
+  <ellipse cx="200" cy="410" rx="145" ry="28" fill="url(#c-inner)" opacity="0.4"/>
+
+  <!-- the 7 tendrils, with subtle sway -->
+  <g filter="url(#c-glow)">
+    <path d="M 200 200 Q 180 240 165 290 Q 155 340 170 380" fill="none" stroke="url(#c-tendril)" stroke-width="6"   opacity="0.85" stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 180 240 165 290 Q 155 340 170 380;
+                M 200 200 Q 184 242 172 292 Q 162 342 178 382;
+                M 200 200 Q 180 240 165 290 Q 155 340 170 380"
+        dur="6.5s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 200 200 Q 230 230 250 280 Q 265 330 245 380" fill="none" stroke="url(#c-tendril)" stroke-width="5"   opacity="0.8"  stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 230 230 250 280 Q 265 330 245 380;
+                M 200 200 Q 226 232 244 282 Q 258 334 238 384;
+                M 200 200 Q 230 230 250 280 Q 265 330 245 380"
+        dur="7s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 200 200 Q 160 220 130 250 Q 100 285 90 330" fill="none" stroke="url(#c-tendril)" stroke-width="4"   opacity="0.7"  stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 160 220 130 250 Q 100 285 90 330;
+                M 200 200 Q 156 222 124 252 Q 92 288 80 334;
+                M 200 200 Q 160 220 130 250 Q 100 285 90 330"
+        dur="8s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 200 200 Q 245 215 280 240 Q 320 270 335 310" fill="none" stroke="url(#c-tendril)" stroke-width="4"   opacity="0.7"  stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 245 215 280 240 Q 320 270 335 310;
+                M 200 200 Q 248 217 285 244 Q 326 274 342 316;
+                M 200 200 Q 245 215 280 240 Q 320 270 335 310"
+        dur="7.5s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 200 200 Q 200 250 195 300 Q 200 350 210 395" fill="none" stroke="url(#c-tendril)" stroke-width="7"   opacity="0.9"  stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 200 250 195 300 Q 200 350 210 395;
+                M 200 200 Q 202 252 198 302 Q 205 352 216 397;
+                M 200 200 Q 200 250 195 300 Q 200 350 210 395"
+        dur="5.5s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 200 200 Q 150 195 105 200 Q 60 210 35 235"   fill="none" stroke="url(#c-tendril)" stroke-width="3.5" opacity="0.6"  stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 150 195 105 200 Q 60 210 35 235;
+                M 200 200 Q 148 197 102 203 Q 56 214 30 240;
+                M 200 200 Q 150 195 105 200 Q 60 210 35 235"
+        dur="9s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 200 200 Q 255 198 305 205 Q 350 215 380 235" fill="none" stroke="url(#c-tendril)" stroke-width="3.5" opacity="0.6"  stroke-linecap="round">
+      <animate attributeName="d"
+        values="M 200 200 Q 255 198 305 205 Q 350 215 380 235;
+                M 200 200 Q 257 200 308 208 Q 354 218 385 240;
+                M 200 200 Q 255 198 305 205 Q 350 215 380 235"
+        dur="8.5s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- bright highlight on the signature tendrils -->
+  <g style="mix-blend-mode: screen;">
+    <path d="M 200 200 Q 180 240 165 290 Q 155 340 170 380" fill="none" stroke="url(#c-tendril-bright)" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 200 200 Q 200 250 195 300 Q 200 350 210 395" fill="none" stroke="url(#c-tendril-bright)" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- the asymmetric jellyfish body — NOT a circle -->
+  <g>
+    <g filter="url(#c-organic)">
+      <path d="M 200 110 C 240 108, 270 130, 280 165 C 295 200, 285 235, 255 255 C 230 275, 195 280, 165 270 C 130 255, 115 220, 120 185 C 125 145, 160 112, 200 110 Z" fill="url(#c-body)" opacity="0.94"/>
+    </g>
+    <path d="M 200 130 C 230 128, 252 145, 258 175 C 265 200, 255 225, 230 240 C 210 252, 185 252, 165 240 C 145 225, 138 200, 145 175 C 152 150, 175 132, 200 130 Z" fill="url(#c-inner)" opacity="0.7"/>
+    <ellipse cx="195" cy="175" rx="22" ry="14" fill="#fff"    opacity="0.16" transform="rotate(-20 195 175)"/>
+    <ellipse cx="218" cy="210" rx="14" ry="9"  fill="#A7F3D0" opacity="0.28" transform="rotate(40 218 210)"/>
+    <ellipse cx="180" cy="215" rx="10" ry="6"  fill="#67E8F9" opacity="0.32"/>
+    <ellipse cx="185" cy="165" rx="14" ry="8"  fill="#fff"    opacity="0.32" transform="rotate(-25 185 165)"/>
+    <ellipse cx="180" cy="160" rx="5"  ry="3"  fill="#fff"    opacity="0.85" transform="rotate(-25 180 160)"/>
+  </g>
+
+  <!-- drifting light motes -->
+  <g style="mix-blend-mode: screen;">
+    <circle cx="170" cy="160" r="1.2" fill="#A7F3D0"/>
+    <circle cx="232" cy="180" r="1"   fill="#67E8F9"/>
+    <circle cx="200" cy="220" r="1.3" fill="#fff" opacity="0.8"/>
+    <circle cx="190" cy="200" r="0.8" fill="#A7F3D0"/>
+    <circle cx="222" cy="210" r="0.9" fill="#67E8F9"/>
+  </g>
+</svg>

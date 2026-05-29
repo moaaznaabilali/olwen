@@ -58,3 +58,7 @@ backend/data/
 site/.indexnow-key
 .claude/
 /site/
+mac-app/.build-venv/
+mac-app/build/
+mac-app/dist/
+mac-app/*.egg-info/
