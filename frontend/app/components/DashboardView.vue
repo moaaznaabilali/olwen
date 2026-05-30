@@ -145,6 +145,16 @@ function exitDevMode() { devModeOpen.value = false }
 const computerUseOpen = ref(false)
 function exitComputerUse() { computerUseOpen.value = false }
 
+// When a Computer-Use run ends, close the overlay and let Olwen narrate the
+// outcome in chat — so the user is never stranded staring at the screen view.
+function onComputerUseFinished(payload: { ok: boolean; text: string }) {
+  computerUseOpen.value = false
+  olwen.lastQuestion.value = olwen.lastQuestion.value || 'Take the wheel'
+  olwen.answer.value = payload.text
+  olwen.entityState.value = 'idle'
+  if (voiceOn.value) voice.speak(payload.text, voiceLang.value)
+}
+
 // Terminal launched by an agent UI action (so we can pass cwd / autoStart)
 const agentTerminal = ref<{ cwd: string | null; command: string | null } | null>(null)
 
@@ -164,7 +174,15 @@ watch(() => olwen.lastUiAction.value, (val) => {
       break
     }
     case 'open_dev_mode':           devModeOpen.value = true; break
-    case 'open_computer_use':       computerUseOpen.value = true; break
+    case 'open_computer_use': {
+      const instr = (a.instruction as string) || ''
+      computerUseOpen.value = true
+      // Surface the intent + auto-start flag for the ComputerUse component
+      useState<{ goal: string; auto: boolean } | null>('cu:incoming', () => null).value = {
+        goal: instr, auto: !!a.auto_start,
+      }
+      break
+    }
     case 'open_settings': {
       const sec = (a.section as string) || 'connections'
       useState<string>('settings:section', () => 'connections').value = sec
@@ -536,7 +554,7 @@ const priorityColor: Record<string, string> = {
 
     <!-- Computer Use — Olwen drives the OS-level mouse/keyboard via olwen-bridge -->
     <div v-if="computerUseOpen" class="cu-overlay" role="dialog" aria-label="Computer Use">
-      <ComputerUse @close="exitComputerUse" />
+      <ComputerUse @close="exitComputerUse" @finished="onComputerUseFinished" />
     </div>
   </div>
 </template>

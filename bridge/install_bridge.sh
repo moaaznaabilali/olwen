@@ -40,13 +40,15 @@ PY_MINOR=$(python3 -c 'import sys; print(sys.version_info[1])')
 say "installing to $PREFIX"
 mkdir -p "$PREFIX" "$LOG_DIR"
 cp "$SRC_DIR/olwen_bridge.py" "$PREFIX/olwen_bridge.py"
+cp "$SRC_DIR/ax_control.py" "$PREFIX/ax_control.py"   # AX module the bridge imports
 
 say "creating venv + installing deps (this takes ~30s)"
 python3 -m venv "$PREFIX/.venv"
 "$PREFIX/.venv/bin/pip" install --quiet --upgrade pip
 "$PREFIX/.venv/bin/pip" install --quiet \
   fastapi==0.115.* uvicorn==0.32.* pydantic==2.* \
-  pyautogui==0.9.* mss==9.* pillow==11.*
+  pyautogui==0.9.* mss==9.* pillow==11.* \
+  pyobjc-framework-ApplicationServices==12.* pyobjc-framework-Cocoa==12.*
 ok "deps installed"
 
 # ── LaunchAgent plist ────────────────────────────────────────────────

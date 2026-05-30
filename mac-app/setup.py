@@ -7,9 +7,7 @@ from setuptools import setup
 APP = ["olwen_app.py"]
 DATA_FILES: list = []
 OPTIONS = {
-    "argv_emulation": False,
-    "iconfile": "resources/Olwen.icns",
-    "plist": {
+    "argv_emulation": False,    "plist": {
         "CFBundleName": "Olwen",
         "CFBundleDisplayName": "Olwen",
         "CFBundleIdentifier": "com.olwen.app",

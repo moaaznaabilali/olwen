@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
-# Wrap dist/Olwen.app into dist/Olwen-0.1.0.dmg — the .dmg you double-click,
-# drag Olwen onto the Applications shortcut, eject.
+# Build branded Olwen-0.1.0.dmg using create-dmg.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP=dist/Olwen.app
 VERSION="0.1.0"
-DMG="dist/Olwen-${VERSION}.dmg"
-STAGING=dist/.dmg-stage
+FINAL="dist/Olwen-${VERSION}.dmg"
+BG=resources/dmg-background.png
 
-[[ -d "$APP" ]] || { echo "Run ./build.sh first — $APP not found" >&2; exit 1; }
+[[ -d "$APP" ]] || { echo "Run ./build.sh first" >&2; exit 1; }
+command -v create-dmg >/dev/null 2>&1 || { echo "create-dmg missing — brew install create-dmg" >&2; exit 1; }
 
-rm -rf "$STAGING" "$DMG"
-mkdir -p "$STAGING"
-cp -R "$APP" "$STAGING/"
-ln -s /Applications "$STAGING/Applications"
+rm -f "$FINAL"
 
-hdiutil create \
-  -volname "Olwen" \
-  -srcfolder "$STAGING" \
-  -ov -format UDZO \
-  "$DMG" >/dev/null
+create-dmg \
+  --volname "Olwen" \
+  --background "$BG" \
+  --window-pos 200 120 \
+  --window-size 540 380 \
+  --icon-size 128 \
+  --icon "Olwen.app" 150 200 \
+  --app-drop-link 390 200 \
+  --hide-extension "Olwen.app" \
+  --no-internet-enable \
+  "$FINAL" \
+  "$APP"
 
-rm -rf "$STAGING"
-echo "✓ $DMG"
-echo
-echo "Double-click it. Drag Olwen → Applications. Eject. Open from Applications."
+ls -lh "$FINAL"

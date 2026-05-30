@@ -4,6 +4,9 @@ Lets Olwen actually RUN skills via function-calling. Tools exposed to the model
 are built dynamically from the user's installed skills (e.g. Tasks, Web Search).
 Other providers/skills follow this same pattern.
 """
+import asyncio
+import os
+import pathlib
 from collections.abc import AsyncIterator
 
 import httpx
@@ -11,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.security import decrypt_secret
 from app.models.task import Task, TaskList
 from app.models.user import User
 
@@ -111,6 +115,53 @@ _UI_DECLS = [
         "description": "Run AI triage on the user's inbox — prioritise and suggest action per unread email. Use when they ask 'what's in my inbox' or 'triage my emails'.",
         "parameters": {"type": "object", "properties": {}},
     },
+    {
+        "name": "give_olwen_the_wheel",
+        "description": "Hand the user's Mac to Olwen for autonomous control. Olwen will see the screen, decide what to click/type, take a screenshot, look at the result, decide the next step, and repeat until the goal is reached. Use this when the user wants Olwen to actually FINISH a multi-step task on the screen — sending a real WhatsApp/Telegram message to a contact, filling out a form, navigating an app, anything where the one-shot tools above can't solve it. Requires a Claude API key.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "goal": {"type": "string", "description": "Plain-English goal Olwen should achieve, e.g., 'Send a WhatsApp message to Mohamed Elwan saying hello' or 'Find the cheapest flight to Cairo on Skyscanner'."},
+            },
+            "required": ["goal"],
+        },
+    },
+    {
+        "name": "find_contact",
+        "description": "Search the user's macOS Contacts (address book) for someone by name and return their phone numbers. ALWAYS call this BEFORE send_message when the user names a person ('Mohamed', 'my mom', 'Ahmed'). Skip it only when the user already gave a phone number or a @username.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Person's name as the user said it (partial OK — fuzzy matched)."},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "send_message",
+        "description": "Compose a WhatsApp or Telegram message on this Mac. Opens the chat with the text pre-filled — the user hits Send. Use when the user asks 'send a WhatsApp/Telegram to <someone> saying <text>' or 'message <name> on whatsapp/telegram'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "app": {"type": "string", "description": "Which messenger: 'whatsapp' or 'telegram'."},
+                "to": {"type": "string", "description": "Recipient phone number (international format, no +, e.g. 966555123456) for WhatsApp, or @username for Telegram. Use 'self' to message yourself."},
+                "text": {"type": "string", "description": "The message body."},
+            },
+            "required": ["app", "text"],
+        },
+    },
+    {
+        "name": "open_mac_app",
+        "description": "Open a native macOS application by name (Chrome, Safari, Spotify, VS Code, Slack, Notes, Mail, Calendar, etc.). Use when the user says 'open <app>', 'launch <app>', or 'start <app>'. The app runs on the user's own machine via `open -a`.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Application name as it appears in /Applications (e.g., 'Google Chrome', 'Safari', 'Visual Studio Code')."},
+                "url": {"type": "string", "description": "Optional URL or file to open with the app."},
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 
@@ -160,6 +211,110 @@ async def _brave_search(query: str) -> dict:
             }
     except Exception as exc:
         return {"error": f"Search failed: {exc}"}
+
+
+def _bridge_conn() -> tuple[str, str]:
+    """(base_url, bearer_token) for the local Olwen bridge."""
+    base = settings.bridge_url.rstrip("/")
+    token = pathlib.Path(os.path.expanduser(settings.bridge_token_path)).read_text().strip()
+    return base, token
+
+
+async def _wa_send_via_ax(to: str, text: str, self_name: str = "") -> dict:
+    """Send a WhatsApp message DETERMINISTICALLY via the bridge's Accessibility
+    endpoints — find the real chat + message box by identity, type with the real
+    keyboard, verify it landed. No AppleScript, no vision model, no tokens.
+    """
+    is_self = (not to) or to.strip().lower() in ("self", "me", "you", "(you)", "myself")
+    label = "you" if is_self else to
+    try:
+        base, token = _bridge_conn()
+    except Exception as exc:  # noqa: BLE001 — token missing / bridge never installed
+        return {"ok": False, "say": f"The Olwen bridge isn't set up ({exc})."}
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(base_url=base, headers=headers, timeout=15.0) as c:
+        async def act(**sel) -> bool:
+            r = await c.post("/ax/act", json={"app": "WhatsApp", **sel})
+            return r.status_code == 200
+
+        async def find(**sel) -> list:
+            r = await c.post("/ax/find", json={"app": "WhatsApp", **sel})
+            return r.json().get("matches", []) if r.status_code == 200 else []
+
+        async def type_text(t: str) -> None:
+            await c.post("/key/type", json={"text": t})
+
+        async def press(*keys: str) -> None:
+            await c.post("/key/press", json={"keys": list(keys)})
+
+        # 0) bridge reachable?
+        try:
+            if (await c.get("/health")).status_code != 200:
+                return {"ok": False, "say": "The Olwen bridge isn't responding."}
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "say": "The Olwen bridge isn't running — open Olwen.app."}
+
+        # Remember where the user was (Olwen's browser/app) so we can hand focus
+        # back when we're done — they should see Olwen, not be stranded in WhatsApp.
+        prev_front = ""
+        try:
+            fr = await c.get("/ax/frontmost")
+            if fr.status_code == 200:
+                prev_front = fr.json().get("bundle") or fr.json().get("name") or ""
+        except Exception:  # noqa: BLE001
+            pass
+
+        async def _return_to_olwen() -> None:
+            if prev_front:
+                try:
+                    await c.post("/ax/activate", json={"app": prev_front})
+                except Exception:  # noqa: BLE001
+                    pass
+
+        async def _send() -> dict:
+            # 1) Bring WhatsApp to the front (Chats tab press also activates it).
+            if not await act(desc="Chats", action="press", activate=True):
+                return {"ok": False, "say": "Couldn't reach WhatsApp — is it installed and running?"}
+            await asyncio.sleep(0.6)
+
+            # 2) open the target chat
+            if is_self:
+                # "New Chat → Message yourself" reaches the self-chat reliably —
+                # the main chat list is virtualized so the pinned self-chat can
+                # scroll out of the tree, but the New-Chat picker always lists it.
+                await act(desc="New Chat", action="press")
+                await asyncio.sleep(1.0)
+                opened = await act(role="AXStaticText", value_contains="Message yourself", action="press")
+            else:
+                # Search for the contact by name, then open the matching row.
+                await act(role="AXTextField", placeholder_contains="search", action="focus")
+                await press("command", "a"); await press("delete")
+                await type_text(to)
+                await asyncio.sleep(1.4)
+                opened = await act(role="AXButton", desc_contains=to, action="press")
+            if not opened:
+                return {"ok": False, "say": f"I couldn't find your WhatsApp chat with {label}."}
+            await asyncio.sleep(1.0)
+
+            # 3) focus the composer, type, send
+            if not await act(role="AXTextArea", desc="Compose message", action="focus"):
+                return {"ok": False, "say": "Opened the chat but couldn't find the message box."}
+            await asyncio.sleep(0.3)
+            await type_text(text)
+            await asyncio.sleep(0.3)
+            await press("enter")
+            await asyncio.sleep(1.1)
+
+            # 4) verify the message is now in the conversation
+            if await find(value_contains=text[:30]):
+                return {"ok": True, "say": f"Sent to {label} on WhatsApp — confirmed it's in the chat."}
+            return {"ok": True, "verified": False,
+                    "say": f"I sent it to {label}, but couldn't confirm it landed — mind a glance?"}
+
+        result = await _send()
+        await _return_to_olwen()   # hand focus back so the user sees Olwen's reply
+        return result
 
 
 async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -> dict:
@@ -278,6 +433,140 @@ async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -
         return {"ui_action": "triage_inbox", "ok": True,
                 "say": "Triaging your inbox."}
 
+    if name == "give_olwen_the_wheel":
+        goal = (args.get("goal") or "").strip()
+        if not goal:
+            return {"error": "missing goal"}
+        return {
+            "ui_action": "open_computer_use",
+            "instruction": goal,
+            "auto_start": True,
+            "say": f"Taking the wheel — {goal}. STOP button is at the top if you need to.",
+        }
+
+    if name == "find_contact":
+        import subprocess
+        q = (args.get("name") or "").strip()
+        if not q:
+            return {"error": "missing name"}
+        script = f'''
+        tell application "Contacts"
+            set out to ""
+            set matches to (every person whose name contains "{q}")
+            repeat with p in matches
+                set pn to (name of p)
+                repeat with ph in (phones of p)
+                    set out to out & pn & "|" & (value of ph) & linefeed
+                end repeat
+            end repeat
+            return out
+        end tell
+        '''
+        try:
+            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=10)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"contacts lookup failed: {exc}"}
+        lines = [l for l in (res.stdout or "").strip().splitlines() if "|" in l]
+        contacts = [{"name": l.split("|", 1)[0].strip(), "phone": l.split("|", 1)[1].strip()} for l in lines]
+        if not contacts:
+            hint = " (macOS may need Contacts permission — System Settings → Privacy → Contacts)" if "1743" in (res.stderr or "") else ""
+            return {"ok": True, "matches": [], "say": f"No contact named '{q}' found.{hint}"}
+        return {"ok": True, "matches": contacts[:8], "say": f"Found {len(contacts)} match{'es' if len(contacts) > 1 else ''} for {q}."}
+
+    if name == "send_message":
+        import subprocess, urllib.parse
+        app_kind = (args.get("app") or "").strip().lower()
+        to = (args.get("to") or "").strip()
+        text = (args.get("text") or "").strip()
+        if not text:
+            return {"error": "missing message text"}
+        if app_kind in ("whatsapp", "wa"):
+            # Deterministic send via the bridge's Accessibility endpoints: find
+            # the real chat + message box by identity and type with the real
+            # keyboard, then verify. No AppleScript, no vision model, no tokens.
+            return await _wa_send_via_ax(to, text, self_name=user.display_name or "")
+        if app_kind in ("telegram", "tg"):
+            # Telegram deep-link: tg://msg?text=<encoded>&to=<username>
+            user = to.lstrip("@") if to and to.lower() != "self" else ""
+            url = f"tg://msg?text={urllib.parse.quote(text)}"
+            if user:
+                url = f"tg://resolve?domain={user}"  # open chat first
+                subprocess.Popen(["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # Then prep the message
+                url2 = f"tg://msg?text={urllib.parse.quote(text)}"
+                subprocess.Popen(["open", url2], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                subprocess.Popen(["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return {"ok": True, "say": "Opened Telegram with your message ready. Hit Send when you're happy with it."}
+        return {"error": f"unsupported app '{app_kind}' — try 'whatsapp' or 'telegram'"}
+
+    if name == "open_mac_app":
+        # Fuzzy-find an app on the user's Mac and open it.
+        import os, shutil, subprocess
+        from difflib import get_close_matches
+
+        wanted = (args.get("name") or "").strip()
+        url = (args.get("url") or "").strip()
+        if not wanted:
+            return {"error": "missing app name"}
+
+        # Build the catalog of installed apps from /Applications + ~/Applications
+        catalog: dict[str, str] = {}
+        for base in ["/Applications", "/System/Applications", os.path.expanduser("~/Applications")]:
+            if not os.path.isdir(base):
+                continue
+            try:
+                for entry in os.listdir(base):
+                    if entry.endswith(".app"):
+                        full = os.path.join(base, entry)
+                        nm = entry[:-4]
+                        catalog[nm.lower()] = nm  # key lowercase, value real name
+            except PermissionError:
+                continue
+
+        # Aliases
+        ALIASES = {
+            "chrome": "Google Chrome", "vscode": "Visual Studio Code",
+            "vs code": "Visual Studio Code", "code": "Visual Studio Code",
+            "xcode": "Xcode", "iterm": "iTerm", "iterm2": "iTerm",
+            "whatsapp": "WhatsApp", "ig": "Instagram", "x": "X",
+            "twitter": "X", "vlc": "VLC", "ps": "Photoshop",
+        }
+        key = ALIASES.get(wanted.lower(), wanted).lower()
+
+        # Exact match? close match? substring match?
+        resolved = None
+        if key in catalog:
+            resolved = catalog[key]
+        else:
+            matches = get_close_matches(key, catalog.keys(), n=1, cutoff=0.6)
+            if matches:
+                resolved = catalog[matches[0]]
+            else:
+                # substring fallback (e.g. "chrome" → "Google Chrome")
+                for k, v in catalog.items():
+                    if key in k:
+                        resolved = v; break
+
+        if not resolved:
+            installed = sorted(catalog.values())
+            return {
+                "error": f"'{wanted}' is not installed on this Mac",
+                "say": f"I don't see {wanted} installed. Want me to open a different app?",
+                "available_count": len(installed),
+            }
+
+        if not shutil.which("open"):
+            return {"error": "macOS 'open' command not available"}
+        cmd = ["open", "-a", resolved]
+        if url:
+            cmd.append(url)
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"could not open {resolved}: {exc}"}
+        return {"ok": True, "opened": resolved, "say": f"Opening {resolved}."}
+
     return {"error": f"unknown tool {name}"}
 
 
@@ -296,6 +585,18 @@ async def run_agent(
         contents.append({"role": role, "parts": [{"text": m.get("content", "")}]})
     contents.append({"role": "user", "parts": [{"text": message}]})
 
+    # Make the model actually USE its tools instead of claiming it can't.
+    tool_directive = (
+        "\n\nYou have real tools that act on the user's Mac: open apps "
+        "(open_mac_app), send WhatsApp/Telegram (send_message, after "
+        "find_contact), control the screen end-to-end (give_olwen_the_wheel), "
+        "manage tasks, search the web, and open your own surfaces. When the "
+        "user asks you to do any of these, CALL THE TOOL — never reply that you "
+        "can't. If a name is given, call find_contact first to get the number. "
+        "If a request needs several screen steps, use give_olwen_the_wheel."
+    )
+    system = system + tool_directive
+
     ui_actions: list[dict] = []
     url = f"{GEMINI_BASE}/models/{model}:generateContent"
     async with httpx.AsyncClient(timeout=60) as client:
@@ -303,8 +604,24 @@ async def run_agent(
             body: dict = {"system_instruction": {"parts": [{"text": system}]}, "contents": contents}
             if tools:
                 body["tools"] = tools
-            resp = await client.post(url, headers={"x-goog-api-key": api_key}, json=body)
-            resp.raise_for_status()
+            # Retry transient Gemini failures (503 overloaded, 429 rate-limit)
+            # with exponential backoff so the user doesn't see Google's hiccups.
+            last_exc: Exception | None = None
+            for attempt in range(4):
+                try:
+                    resp = await client.post(url, headers={"x-goog-api-key": api_key}, json=body)
+                    if resp.status_code in (429, 500, 502, 503, 504):
+                        last_exc = httpx.HTTPStatusError(f"transient {resp.status_code}", request=resp.request, response=resp)
+                        await asyncio.sleep(1.5 * (2 ** attempt))  # 1.5, 3, 6, 12s
+                        continue
+                    resp.raise_for_status()
+                    last_exc = None
+                    break
+                except httpx.HTTPError as e:
+                    last_exc = e
+                    await asyncio.sleep(1.5 * (2 ** attempt))
+            if last_exc:
+                raise last_exc
             data = resp.json()
             content = (data.get("candidates") or [{}])[0].get("content", {})
             parts = content.get("parts", [])

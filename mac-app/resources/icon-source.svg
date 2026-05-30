@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#0E1F2A"/>
+      <stop offset="55%" stop-color="#04101A"/>
+      <stop offset="100%" stop-color="#02060A"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0.55"/>
+      <stop offset="50%" stop-color="#22D3EE" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="body" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#ECFEFF" stop-opacity="0.98"/>
+      <stop offset="25%" stop-color="#67E8F9" stop-opacity="0.7"/>
+      <stop offset="60%" stop-color="#0891B2" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#164E63" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="inner" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#A7F3D0" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#5EEAD4" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tendril" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#67E8F9" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#22D3EE" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#0E7490" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="tendril-bright" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A7F3D0" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="organic"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- atmospheric halo, fills most of the tile -->
+  <circle cx="512" cy="480" r="420" fill="url(#halo)"/>
+
+  <!-- mist clouds beneath -->
+  <ellipse cx="350" cy="820" rx="280" ry="80" fill="url(#inner)" opacity="0.35"/>
+  <ellipse cx="700" cy="780" rx="230" ry="65" fill="url(#inner)" opacity="0.3"/>
+  <ellipse cx="512" cy="930" rx="380" ry="50" fill="url(#inner)" opacity="0.4"/>
+
+  <!-- 7 tendrils, scaled large to fill the lower half -->
+  <g filter="url(#glow)">
+    <path d="M 512 500 Q 460 600 420 720 Q 395 840 435 940" fill="none" stroke="url(#tendril)" stroke-width="18" opacity="0.9" stroke-linecap="round"/>
+    <path d="M 512 500 Q 590 580 640 700 Q 680 820 625 940" fill="none" stroke="url(#tendril)" stroke-width="15" opacity="0.85" stroke-linecap="round"/>
+    <path d="M 512 500 Q 410 550 330 620 Q 250 700 225 810" fill="none" stroke="url(#tendril)" stroke-width="11" opacity="0.75" stroke-linecap="round"/>
+    <path d="M 512 500 Q 625 540 720 600 Q 820 670 855 770" fill="none" stroke="url(#tendril)" stroke-width="11" opacity="0.75" stroke-linecap="round"/>
+    <path d="M 512 500 Q 512 625 500 750 Q 512 875 540 985" fill="none" stroke="url(#tendril)" stroke-width="22" opacity="0.95" stroke-linecap="round"/>
+    <path d="M 512 500 Q 380 490 265 505 Q 150 525 90 585" fill="none" stroke="url(#tendril)" stroke-width="9" opacity="0.65" stroke-linecap="round"/>
+    <path d="M 512 500 Q 655 495 780 515 Q 895 540 950 590" fill="none" stroke="url(#tendril)" stroke-width="9" opacity="0.65" stroke-linecap="round"/>
+  </g>
+
+  <!-- bright highlight on signature tendrils -->
+  <g style="mix-blend-mode: screen;">
+    <path d="M 512 500 Q 460 600 420 720 Q 395 840 435 940" fill="none" stroke="url(#tendril-bright)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 512 500 Q 512 625 500 750 Q 512 875 540 985" fill="none" stroke="url(#tendril-bright)" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- asymmetric body, large and centered -->
+  <g>
+    <g filter="url(#organic)">
+      <path d="M 512 220
+               C 612 215, 690 280, 712 380
+               C 745 480, 715 568, 635 620
+               C 570 670, 480 685, 400 660
+               C 310 620, 270 530, 285 430
+               C 300 320, 388 222, 512 220 Z"
+            fill="url(#body)" opacity="0.96"/>
+    </g>
+    <path d="M 512 270
+             C 590 265, 645 310, 660 390
+             C 678 460, 650 528, 588 568
+             C 540 600, 470 600, 420 568
+             C 365 530, 348 460, 365 390
+             C 382 320, 440 272, 512 270 Z"
+          fill="url(#inner)" opacity="0.7"/>
+    <ellipse cx="498" cy="400" rx="55" ry="35" fill="#fff" opacity="0.16" transform="rotate(-20 498 400)"/>
+    <ellipse cx="560" cy="490" rx="35" ry="22" fill="#A7F3D0" opacity="0.28" transform="rotate(40 560 490)"/>
+    <ellipse cx="460" cy="500" rx="25" ry="15" fill="#67E8F9" opacity="0.32"/>
+    <!-- specular sparkle -->
+    <ellipse cx="470" cy="380" rx="36" ry="20" fill="#fff" opacity="0.34" transform="rotate(-25 470 380)"/>
+    <ellipse cx="460" cy="368" rx="13" ry="8" fill="#fff" opacity="0.9" transform="rotate(-25 460 368)"/>
+  </g>
+
+  <!-- drifting motes -->
+  <g style="mix-blend-mode: screen;">
+    <circle cx="430" cy="390" r="3" fill="#A7F3D0"/>
+    <circle cx="595" cy="430" r="2.5" fill="#67E8F9"/>
+    <circle cx="512" cy="540" r="3.5" fill="#fff" opacity="0.8"/>
+    <circle cx="485" cy="495" r="2" fill="#A7F3D0"/>
+    <circle cx="568" cy="515" r="2.3" fill="#67E8F9"/>
+  </g>
+</svg>

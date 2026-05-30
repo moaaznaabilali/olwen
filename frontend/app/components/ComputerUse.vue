@@ -17,7 +17,12 @@ type Event =
   | { kind: 'done'; text?: string; ts: number }
   | { kind: 'error'; text: string; ts: number }
 
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  // Fired when the run ends — hands a plain-language summary back to Olwen so
+  // the chat reports what happened instead of leaving the user in this overlay.
+  (e: 'finished', payload: { ok: boolean; text: string }): void
+}>()
 
 const apiBase = useRuntimeConfig().public.apiBase as string
 function h() {
@@ -77,6 +82,8 @@ async function start() {
     if (!res.ok || !res.body) {
       events.value.push({ kind: 'error', text: `HTTP ${res.status}`, ts: Date.now() / 1000 })
       running.value = false
+      emit('finished', { ok: false, text: `I couldn't start that on screen (HTTP ${res.status}).` })
+      emit('close')
       return
     }
     const reader = res.body.getReader()
@@ -100,7 +107,17 @@ async function start() {
             events.value.push(ev)
             queueMicrotask(() => scroller.value?.scrollTo({ top: scroller.value!.scrollHeight, behavior: 'smooth' }))
           }
-          if (ev.kind === 'done' || ev.kind === 'error') running.value = false
+          if (ev.kind === 'done' || ev.kind === 'error') {
+            running.value = false
+            // Return control to Olwen and let the chat narrate the outcome.
+            emit('finished', {
+              ok: ev.kind === 'done',
+              text: ev.kind === 'done'
+                ? (ev.text || 'Done.')
+                : `I couldn't finish that on screen: ${ev.text}`,
+            })
+            emit('close')
+          }
         } catch { /* malformed chunk — skip */ }
       }
     }
@@ -138,6 +155,14 @@ function fmtAction(a: { action: string; coordinate?: [number, number]; text?: st
 onMounted(async () => {
   await check()
   await refreshShot()
+  // If the chat agent pre-filled a goal via give_olwen_the_wheel, auto-run it
+  const incoming = useState<{ goal: string; auto: boolean } | null>('cu:incoming', () => null)
+  if (incoming.value?.goal) {
+    instruction.value = incoming.value.goal
+    const shouldStart = incoming.value.auto && status.value?.ok
+    incoming.value = null
+    if (shouldStart) start()
+  }
 })
 onBeforeUnmount(() => {
   controller?.abort()

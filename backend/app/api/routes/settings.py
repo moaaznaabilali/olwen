@@ -75,6 +75,12 @@ def _check_provider(provider: str) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown provider")
 
 
+def _check_selectable(provider: str) -> None:
+    # "auto" is selectable as the active brain even though it's not a real key slot.
+    if provider != "auto" and provider not in PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown provider")
+
+
 @router.get("", response_model=SettingsRead)
 async def get_settings(user: CurrentUser) -> SettingsRead:
     return _read(user)
@@ -171,8 +177,14 @@ async def disconnect_provider(
 async def select_provider(
     data: SelectProviderRequest, user: CurrentUser, session: SessionDep
 ) -> SettingsRead:
-    _check_provider(data.provider)
-    if _key_enc(user, data.provider) is None:
+    _check_selectable(data.provider)
+    if data.provider == "auto":
+        if not any(_key_enc(user, p) for p in PROVIDERS):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Connect at least one provider before using Auto.",
+            )
+    elif _key_enc(user, data.provider) is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Connect that provider's key first.",

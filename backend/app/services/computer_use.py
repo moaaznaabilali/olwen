@@ -22,6 +22,8 @@ import asyncio
 import base64
 import os
 import pathlib
+import re
+import subprocess
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -162,8 +164,60 @@ def _split_chord(chord: str) -> list[str]:
 
 # ── Claude loop ────────────────────────────────────────────────────────
 ANTHROPIC_BASE = "https://api.anthropic.com/v1"
+# Keep at most this many screenshots in the running message history. Older image
+# tool_results are swapped for a short text note so we don't resend megabytes of
+# pixels every step (the thing that blows past per-minute token rate limits).
+_KEEP_IMAGES = 2
+
+
+def _truncate_images(messages: list[dict], keep: int) -> None:
+    """In-place: strip image blocks from all but the last `keep` screenshots."""
+    # Find image-bearing tool_result blocks, newest first, and blank out the old.
+    seen = 0
+    for msg in reversed(messages):
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            inner = block.get("content")
+            if not (isinstance(inner, list) and any(
+                isinstance(c, dict) and c.get("type") == "image" for c in inner
+            )):
+                continue
+            seen += 1
+            if seen > keep:
+                block["content"] = [{"type": "text", "text": "[earlier screenshot omitted to save tokens]"}]
+
+
+# Desktop apps Olwen may be asked to drive — matched in the instruction so we can
+# bring the real app forward before Claude starts (the browser otherwise occludes it).
+_FOCUSABLE_APPS = ["WhatsApp", "Telegram", "Messages", "Mail", "Notes", "Slack", "Discord", "Calendar", "Finder", "Safari"]
+
+
+def _focus_target_app(instruction: str) -> str | None:
+    for app in _FOCUSABLE_APPS:
+        if re.search(rf"\b{re.escape(app)}\b", instruction, re.I):
+            return app
+    return None
+
+
+def _retry_after(resp, attempt: int) -> float:
+    """Seconds to wait before retrying — honor Retry-After, else exp backoff."""
+    ra = resp.headers.get("retry-after")
+    if ra:
+        try:
+            return min(float(ra), 30.0)
+        except ValueError:
+            pass
+    return min(3.0 * (2 ** attempt), 30.0)
+
+
 COMPUTER_TOOL = {
-    "type": "computer_20241022",
+    # Claude 4.x models (sonnet-4-6, opus 4.5+) require the 2025-11-24 computer
+    # tool with the matching beta header below. Older versions are rejected.
+    "type": "computer_20251124",
     "name": "computer",
     "display_width_px": 1280,
     "display_height_px": 800,
@@ -201,6 +255,22 @@ async def run_computer_use(
         yield ComputerUseEvent("error", text=f"Bridge unreachable: {exc}. Is olwen-bridge running?")
         return
 
+    # Bring the target desktop app to the FRONT before handing Claude the wheel.
+    # Olwen lives in a browser window that otherwise sits on top of (and steals
+    # clicks from) the app we're trying to drive — so Claude clicks the browser,
+    # not e.g. WhatsApp. Activating it first puts the right app under the cursor.
+    focused = _focus_target_app(user_instruction)
+    if focused:
+        try:
+            await asyncio.to_thread(
+                subprocess.run, ["osascript", "-e", f'tell application "{focused}" to activate'],
+                capture_output=True, text=True, timeout=8,
+            )
+            await asyncio.sleep(1.2)  # let it come forward before the first shot
+            yield ComputerUseEvent("thought", text=f"Bringing {focused} to the front…")
+        except Exception:  # noqa: BLE001
+            pass
+
     # Seed the conversation with the user's request + an initial screenshot.
     initial_png = await bridge.screenshot_png()
     initial_b64 = base64.b64encode(initial_png).decode()
@@ -219,7 +289,7 @@ async def run_computer_use(
     headers = {
         "x-api-key": anthropic_api_key,
         "anthropic-version": "2023-06-01",
-        "anthropic-beta": "computer-use-2024-10-22",
+        "anthropic-beta": "computer-use-2025-11-24",
         "content-type": "application/json",
     }
 
@@ -230,6 +300,11 @@ async def run_computer_use(
                 yield ComputerUseEvent("done", text="stopped by user")
                 return
 
+            # Screenshots dominate token use and resending the whole history blows
+            # past tight per-minute rate limits. Keep only the most recent few
+            # images; older ones become a tiny text placeholder.
+            _truncate_images(messages, keep=_KEEP_IMAGES)
+
             body = {
                 "model": settings.computer_use_model,
                 "max_tokens": 1024,
@@ -237,25 +312,48 @@ async def run_computer_use(
                 "tools": [tool],
                 "messages": messages,
             }
-            try:
-                r = await http.post(f"{ANTHROPIC_BASE}/messages", json=body, headers=headers)
-                r.raise_for_status()
-                response = r.json()
-            except httpx.HTTPStatusError as exc:
-                yield ComputerUseEvent("error", text=f"Claude rejected the request: {exc.response.status_code} {exc.response.text[:200]}")
-                return
-            except httpx.HTTPError as exc:
-                yield ComputerUseEvent("error", text=f"Network error talking to Claude: {exc}")
+            # Send, retrying on 429 (rate limit) / transient 5xx with backoff so a
+            # low per-minute token budget slows us down instead of killing the run.
+            response = None
+            for attempt in range(5):
+                if cancel.is_set():
+                    await bridge.stop()
+                    yield ComputerUseEvent("done", text="stopped by user")
+                    return
+                try:
+                    r = await http.post(f"{ANTHROPIC_BASE}/messages", json=body, headers=headers)
+                    if r.status_code in (429, 529) or 500 <= r.status_code < 600:
+                        wait = _retry_after(r, attempt)
+                        if attempt < 4:
+                            yield ComputerUseEvent("thought", text=f"Rate limit — waiting {int(wait)}s, then continuing…")
+                            await asyncio.sleep(wait)
+                            continue
+                    r.raise_for_status()
+                    response = r.json()
+                    break
+                except httpx.HTTPStatusError as exc:
+                    yield ComputerUseEvent("error", text=f"Claude rejected the request: {exc.response.status_code} {exc.response.text[:200]}")
+                    return
+                except httpx.HTTPError as exc:
+                    if attempt < 4:
+                        await asyncio.sleep(2.0 * (2 ** attempt))
+                        continue
+                    yield ComputerUseEvent("error", text=f"Network error talking to Claude: {exc}")
+                    return
+            if response is None:
+                yield ComputerUseEvent("error", text="Claude stayed rate-limited after several retries. Your API plan's per-minute limit is too low for screen control right now.")
                 return
 
             assistant_blocks = response.get("content", [])
             tool_results: list[dict] = []
+            last_text = ""
 
             for block in assistant_blocks:
                 btype = block.get("type")
                 if btype == "text":
                     text = (block.get("text") or "").strip()
                     if text:
+                        last_text = text
                         yield ComputerUseEvent("thought", text=text)
                 elif btype == "tool_use":
                     name = block.get("name", "")
@@ -299,7 +397,7 @@ async def run_computer_use(
             # Append the assistant turn + our tool results, then continue or finish.
             messages.append({"role": "assistant", "content": assistant_blocks})
             if response.get("stop_reason") == "end_turn" or not tool_results:
-                yield ComputerUseEvent("done", text="task complete")
+                yield ComputerUseEvent("done", text=last_text or "Done.")
                 return
             messages.append({"role": "user", "content": tool_results})
 

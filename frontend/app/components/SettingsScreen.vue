@@ -29,26 +29,42 @@ const { fetchSettings, connectProvider, disconnectProvider, selectProvider, upda
 const settings = ref<OlwenSettings | null>(null)
 const busy = ref<Provider | null>(null)
 const keyInput = reactive<Record<Provider, string>>({ claude: '', gemini: '', groq: '' })
-const pmeta: Record<Provider, { name: string, tag: string, link: string, placeholder: string }> = {
-  groq: { name: 'Groq', tag: 'free · fast', link: 'https://console.groq.com', placeholder: 'gsk_…' },
-  gemini: { name: 'Google Gemini', tag: 'free tier', link: 'https://aistudio.google.com/apikey', placeholder: 'AIza…' },
-  claude: { name: 'Claude', tag: 'paid API', link: 'https://console.anthropic.com/settings/keys', placeholder: 'sk-ant-…' },
+const connectErr = reactive<Record<Provider, string>>({ claude: '', gemini: '', groq: '' })
+const pmeta: Record<Provider, { name: string, tag: string, link: string, placeholder: string, steps: string[] }> = {
+  groq: { name: 'Groq', tag: 'free · fast', link: 'https://console.groq.com/keys', placeholder: 'gsk_…',
+    steps: ['Open console.groq.com → sign in', 'API Keys → Create API Key', 'Copy the gsk_… key, paste below'] },
+  gemini: { name: 'Google Gemini', tag: 'free tier', link: 'https://aistudio.google.com/apikey', placeholder: 'AIza…',
+    steps: ['Open aistudio.google.com/apikey', 'Create API key', 'Copy the AIza… key, paste below'] },
+  claude: { name: 'Claude', tag: 'paid · smartest + computer use', link: 'https://console.anthropic.com/settings/keys', placeholder: 'sk-ant-…',
+    steps: ['Add credit at console.anthropic.com → Billing (min $5)', 'Settings → API Keys → Create Key', 'Copy the sk-ant-… key, paste below', 'Required for "give Olwen the wheel" (screen control)'] },
 }
 const porder: Provider[] = ['groq', 'gemini', 'claude']
 
 async function connect(p: Provider) {
-  if (busy.value || keyInput[p].trim().length < 10) { error.value = 'Paste a valid API key.'; return }
+  connectErr[p] = ''
+  if (busy.value) return
+  if (keyInput[p].trim().length < 10) { connectErr[p] = `That doesn't look like a ${pmeta[p].name} key — it should start with "${pmeta[p].placeholder.replace('…','')}".`; return }
   busy.value = p; error.value = ''
   try { settings.value = await connectProvider(p, keyInput[p].trim()); keyInput[p] = '' }
-  catch (e: unknown) { error.value = (e as { data?: { detail?: string } })?.data?.detail || 'Could not connect.' }
+  catch (e: unknown) {
+    const detail = (e as { data?: { detail?: string } })?.data?.detail || ''
+    // Translate common Claude billing/auth failures into plain language
+    if (p === 'claude' && /credit|balance|billing|quota|402/i.test(detail)) {
+      connectErr[p] = 'Key is valid, but your Anthropic account has no credit. Add at least $5 at console.anthropic.com → Billing, then try again.'
+    } else if (/401|invalid|unauthor/i.test(detail)) {
+      connectErr[p] = 'That key was rejected. Copy it again from the key page (no spaces).'
+    } else {
+      connectErr[p] = detail || 'Could not connect — check the key and your internet.'
+    }
+  }
   finally { busy.value = null }
 }
 async function disconnect(p: Provider) {
   busy.value = p
   try { settings.value = await disconnectProvider(p) } catch { error.value = 'Could not disconnect.' } finally { busy.value = null }
 }
-async function use(p: Provider) {
-  busy.value = p
+async function use(p: Provider | 'auto') {
+  busy.value = p as Provider
   try { settings.value = await selectProvider(p) } catch (e: unknown) { error.value = (e as { data?: { detail?: string } })?.data?.detail || 'Connect it first.' } finally { busy.value = null }
 }
 
@@ -218,6 +234,7 @@ onMounted(async () => {
 })
 
 const activeProvider = computed(() => settings.value?.active_provider ?? null)
+const anyConnected = computed(() => porder.some(p => settings.value?.[p]?.connected))
 const fmtStars = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(n))
 </script>
 
@@ -254,6 +271,30 @@ const fmtStars = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\
         <div v-show="section === 'connections'" class="pane">
           <h2 class="pane__title">Your AI</h2>
           <p class="pane__desc">Choose which AI powers Olwen and connect your own key.</p>
+
+          <!-- Auto: let Olwen pick the model per task -->
+          <div class="autocard" :class="{ active: activeProvider === 'auto' }">
+            <div class="autocard__main">
+              <div class="autocard__name">
+                ✦ Auto <span class="tag">smart routing</span>
+                <span v-if="activeProvider === 'auto'" class="badge--on">In use</span>
+              </div>
+              <p class="autocard__desc">
+                Olwen picks the best connected model for each task — Gemini for actions
+                (open apps, send messages, take the wheel), the fastest model for quick chat.
+                Connect one or more below.
+              </p>
+            </div>
+            <button
+              class="btn"
+              :class="activeProvider === 'auto' ? 'btn--ghost' : 'btn--primary'"
+              :disabled="!!busy || !anyConnected"
+              @click="use('auto')"
+            >
+              {{ activeProvider === 'auto' ? 'Active' : 'Use Auto' }}
+            </button>
+          </div>
+
           <div class="grid">
             <div v-for="p in porder" :key="p" class="pcard" :class="{ active: activeProvider === p }">
               <div class="pcard__head">
@@ -270,11 +311,15 @@ const fmtStars = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\
                 </div>
               </template>
               <template v-else>
+                <ol class="psteps">
+                  <li v-for="(s, i) in pmeta[p].steps" :key="i">{{ s }}</li>
+                </ol>
                 <input v-model="keyInput[p]" class="field" type="password" :placeholder="pmeta[p].placeholder" @keyup.enter="connect(p)">
                 <div class="row">
                   <button class="btn btn--primary" :disabled="!!busy" @click="connect(p)">{{ busy === p ? 'Verifying…' : 'Connect' }}</button>
-                  <a class="link" :href="pmeta[p].link" target="_blank" rel="noopener">Get a key →</a>
+                  <a class="link" :href="pmeta[p].link" target="_blank" rel="noopener">Open key page →</a>
                 </div>
+                <p v-if="connectErr[p]" class="perr">{{ connectErr[p] }}</p>
               </template>
             </div>
           </div>
@@ -776,6 +821,31 @@ const fmtStars = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\
 .field { padding: 10px 12px; border-radius: 8px; outline: none; font-size: 13px; border: 0.5px solid rgba(94,234,212,0.18); background: rgba(2,6,10,0.5); color: #E2F5F1; flex: 1; }
 .field:focus { border-color: #5EEAD4; }
 .field::placeholder { color: rgba(167,243,208,0.3); }
+.autocard {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px 18px; margin-bottom: 18px;
+  border-radius: 14px;
+  border: 0.5px solid rgba(94,234,212,0.25);
+  background: linear-gradient(135deg, rgba(94,234,212,0.06), rgba(103,232,249,0.03));
+}
+.autocard.active { border-color: rgba(94,234,212,0.6); background: linear-gradient(135deg, rgba(94,234,212,0.12), rgba(103,232,249,0.05)); }
+.autocard__main { flex: 1; min-width: 0; }
+.autocard__name { display: flex; align-items: center; gap: 8px; font-size: 15px; color: #ECFEFF; font-weight: 500; }
+.autocard__desc { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: rgba(167,243,208,0.6); }
+
+.psteps {
+  margin: 4px 0 12px; padding-left: 18px;
+  font-size: 12px; line-height: 1.6; color: rgba(167,243,208,0.6);
+}
+.psteps li { margin: 2px 0; }
+.perr {
+  margin: 10px 0 0; padding: 8px 10px;
+  font-size: 12px; line-height: 1.45;
+  color: #FCA5A5;
+  background: rgba(252,165,165,0.08);
+  border: 0.5px solid rgba(252,165,165,0.3);
+  border-radius: 8px;
+}
 .row { display: flex; align-items: center; gap: 10px; }
 .btn { padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; transition: all .2s ease; }
 .btn:disabled { opacity: 0.5; cursor: progress; }

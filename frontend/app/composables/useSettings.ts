@@ -64,7 +64,7 @@ export function useSettings() {
     })
   }
 
-  async function selectProvider(provider: Provider): Promise<OlwenSettings> {
+  async function selectProvider(provider: Provider | 'auto'): Promise<OlwenSettings> {
     return await $fetch<OlwenSettings>(`${apiBase}/api/users/settings`, {
       method: 'PUT',
       headers: authHeaders(),

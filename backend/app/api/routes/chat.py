@@ -31,7 +31,11 @@ _AGENT_INTENT = re.compile(
     # opening apps / surfaces inside Olwen
     r"|\b(open|launch|start|run|enter|show|go\s+to)\s+(terminal|shell|console|dev\s*mode|focus|"
     r"settings|inbox|email|compose|news|brief)\b"
-    r"|\b(write|send|compose|reply)\s+(an?\s+)?(email|message)\b"
+    # opening any native macOS app — generic "open/launch/start <something>"
+    r"|\b(open|launch|start)\s+\S{2,}"
+    r"|\b(write|send|compose|reply|text|dm)\s+(an?\s+)?(email|mess?age|msg|whats\s*app|tele\s*gram|wa|tg|sms)\b"
+    r"|\b(mess?age|whats\s*app|tele\s*gram|wa|tg)\b.*\b(me|him|her|them|to|say|saying|that)\b"
+    r"|\b(send|text|tell)\b.*\b(whats\s*app|tele\s*gram|message|mesage)\b"
     r"|\b(begin|start)\s+work(ing)?\b"
     r"|\b(claude|claude\s*code|code\s+mode)\b",
     re.IGNORECASE,
@@ -46,6 +50,28 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     history: list[ChatMessage] = Field(default_factory=list)
+
+
+def _auto_route(message: str, enc_by: dict[str, str | None]) -> str | None:
+    """Pick the best connected provider for this message.
+
+    Tools (open apps, send messages, take the wheel, tasks, search) are wired
+    on Gemini, so any *actionable* request routes to Gemini when connected.
+    Plain conversation routes to the fastest/cheapest connected provider.
+
+    Returns a provider key, or None if nothing is connected.
+    """
+    connected = [p for p in ("claude", "gemini", "groq") if enc_by.get(p)]
+    if not connected:
+        return None
+    # Actionable / tool-ish message → Gemini (where tools work) if available.
+    if _AGENT_INTENT.search(message) and "gemini" in connected:
+        return "gemini"
+    # Otherwise plain chat: fast & cheap first.
+    for pref in ("groq", "gemini", "claude"):
+        if pref in connected:
+            return pref
+    return connected[0]
 
 
 def _sse(event: dict) -> str:
@@ -78,21 +104,29 @@ async def chat_stream(data: ChatRequest, user: CurrentUser, session: SessionDep)
     skills = [f"{cat[k]['name']} — {cat[k]['description']}" for k in installed_keys if k in cat]
 
     # Resolve the user's chosen provider + their key (decrypted just in time).
-    provider = user.llm_provider
-    user_key: str | None = None
-    _enc = {
+    # "auto" → pick the best connected provider for THIS message.
+    _enc_by = {
         "claude": user.llm_api_key_enc,
         "gemini": user.gemini_key_enc,
         "groq": user.groq_key_enc,
-    }.get(provider or "")
+    }
+    provider = user.llm_provider
+    if provider == "auto":
+        provider = _auto_route(data.message, _enc_by)
+    user_key: str | None = None
+    _enc = _enc_by.get(provider or "")
     if _enc:
         user_key = decrypt_secret(_enc)
     else:
         provider = None  # nothing connected → falls back to env/mock
 
-    # Real execution: build tools from installed skills; run the agent when the
-    # user has a Gemini key + some tool is available + the message looks tool-ish.
-    tools = build_tools(installed_keys) if provider == "gemini" and user_key else []
+    # Tools (open apps, send messages, take the wheel, tasks, search) run on the
+    # Gemini agent loop. Use it for any ACTIONABLE message whenever a Gemini key
+    # is connected — regardless of which provider the user picked for chat. This
+    # way "send a whatsapp" works even when the chat brain is Claude or Groq.
+    _gem_enc = _enc_by.get("gemini")
+    gemini_key = decrypt_secret(_gem_enc) if _gem_enc else None
+    tools = build_tools(installed_keys) if gemini_key else []
     use_agent = bool(tools) and bool(_AGENT_INTENT.search(data.message))
 
     async def event_source() -> AsyncIterator[str]:
@@ -100,7 +134,7 @@ async def chat_stream(data: ChatRequest, user: CurrentUser, session: SessionDep)
             if use_agent:
                 system = _build_system(memories, skills)
                 result = await run_agent(
-                    data.message, history, user_key, settings.gemini_model,
+                    data.message, history, gemini_key, settings.gemini_model,
                     system, tools, user, session,
                 )
                 # Surface UI actions first so the frontend can dispatch them

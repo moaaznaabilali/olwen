@@ -48,15 +48,15 @@ onMounted(() => {
       </div>
     </Transition>
 
-    <!-- bioluminescent custom pointer — replaces the OS cursor on hover-capable devices -->
-    <CosmicCursor />
+    <!-- custom cursor removed — native pointer is calmer and avoids click conflicts -->
   </div>
 </template>
 
 <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
-html, body, #__nuxt { margin: 0; height: 100%; }
+/* Ensure the native cursor is always visible (custom cursor was removed). */
+html, body, #__nuxt { margin: 0; height: 100%; cursor: auto; }
 body {
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #02060A;
