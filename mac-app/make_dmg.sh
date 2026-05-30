@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build branded Olwen-0.1.0.dmg using create-dmg.
+# Build branded Olwen-<version>.dmg using create-dmg.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP=dist/Olwen.app
-VERSION="0.1.0"
+VERSION="0.2.0"
 FINAL="dist/Olwen-${VERSION}.dmg"
 BG=resources/dmg-background.png
 
