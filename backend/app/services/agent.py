@@ -75,6 +75,21 @@ _UI_DECLS = [
         "parameters": {"type": "object", "properties": {}},
     },
     {
+        "name": "open_dev_studio",
+        "description": (
+            "Open DEV STUDIO — a live, split-screen coding workspace: two project terminals "
+            "side by side (each running Claude Code), the Olwen creature, and a live rail "
+            "showing the project's tasks and the latest pushes to the repo. Use when the user "
+            "says 'let's code', 'let's build', 'start a coding session', 'open my projects to "
+            "work', or names TWO projects to work on together. Pass up to two project name "
+            "hints in `projects`; if omitted, the two most recently modified projects are used."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "projects": {"type": "array", "items": {"type": "string"},
+                         "description": "Up to two project name hints to open side by side."},
+        }},
+    },
+    {
         "name": "open_project",
         "description": (
             "Open one specific local project directly: pops Finder, opens a terminal cd'd into "
@@ -317,6 +332,44 @@ async def _wa_send_via_ax(to: str, text: str, self_name: str = "") -> dict:
         return result
 
 
+async def _wa_read_self_last() -> str:
+    """Read the latest message in your WhatsApp self-chat that ISN'T one of Olwen's
+    own automated pings (those start with ⚠/✅) — i.e. your reply. Best-effort."""
+    import re as _re
+    try:
+        base, token = _bridge_conn()
+    except Exception:  # noqa: BLE001
+        return ""
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(base_url=base, headers=headers, timeout=15.0) as c:
+        async def act(**sel) -> bool:
+            r = await c.post("/ax/act", json={"app": "WhatsApp", **sel})
+            return r.status_code == 200
+        try:
+            if not await act(desc="Chats", action="press", activate=True):
+                return ""
+            await asyncio.sleep(0.5)
+            await act(desc="New Chat", action="press")
+            await asyncio.sleep(0.9)
+            if not await act(role="AXStaticText", value_contains="Message yourself", action="press"):
+                return ""
+            await asyncio.sleep(1.0)
+            r = await c.post("/ax/find", json={"app": "WhatsApp", "role": "AXStaticText", "limit": 250})
+            vals = [m.get("value", "") for m in r.json().get("matches", [])] if r.status_code == 200 else []
+        except Exception:  # noqa: BLE001
+            return ""
+    msgs: list[str] = []
+    for v in vals:
+        m = _re.match(r"Your message, (.+?), \d{1,2}:\d{2}", v)
+        if m:
+            msgs.append(m.group(1).strip())
+    # the user's reply = the last bubble that isn't one of Olwen's ⚠/✅ pings
+    for text in reversed(msgs):
+        if text and text[0] not in ("⚠", "✅", "🤖"):
+            return text
+    return ""
+
+
 async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -> dict:
     if name == "list_tasks":
         rows = await session.execute(
@@ -359,6 +412,39 @@ async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -
     if name == "open_dev_mode":
         return {"ui_action": "open_dev_mode", "ok": True,
                 "say": "Entering dev mode. Pick a project to start."}
+
+    if name == "open_dev_studio":
+        import asyncio as _aio
+        from pathlib import Path as _P
+        from app.api.routes.devmode import _scan_local
+        rows = await _aio.to_thread(_scan_local, _P.home())
+        if not rows:
+            return {"error": "No local git projects found in your usual dev folders."}
+        hints = [h.strip().lower() for h in (args.get("projects") or []) if h and h.strip()]
+        chosen: list[dict] = []
+        seen: set[str] = set()
+        # First, honor any named hints (in order).
+        for hint in hints:
+            for r in rows:
+                if r["path"] in seen:
+                    continue
+                if hint in r["name"].lower() or hint in r["rel"].lower():
+                    chosen.append(r); seen.add(r["path"]); break
+        # Fill the rest with the most recently modified projects.
+        for r in rows:
+            if len(chosen) >= 2:
+                break
+            if r["path"] not in seen:
+                chosen.append(r); seen.add(r["path"])
+        projects = [{"name": r["name"], "path": r["path"],
+                     "autoStart": "claude --dangerously-skip-permissions"} for r in chosen[:2]]
+        names = " + ".join(p["name"] for p in projects)
+        return {
+            "ui_action": "open_dev_studio",
+            "projects": projects,
+            "ok": True,
+            "say": f"Opening Dev Studio — {names}. Two terminals, live tasks & pushes.",
+        }
 
     if name == "list_projects":
         import asyncio as _aio

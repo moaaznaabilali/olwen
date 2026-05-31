@@ -122,6 +122,81 @@ async def _github_repos(user_id, session: SessionDep) -> list[dict[str, Any]]:
     } for r in rows]
 
 
+@router.post("/jobs")
+async def create_job(payload: dict, user: CurrentUser, session: SessionDep) -> dict:
+    """Queue an unattended job: Olwen runs Claude Code on the goal server-side,
+    commits to a branch, opens a PR, and pings you when done/stuck."""
+    from app.models.dev_job import DevJob
+    from app.services.job_runner import run_job
+    goal = (payload.get("goal") or "").strip()
+    path = (payload.get("path") or "").strip()
+    if not goal or not path:
+        return {"error": "goal and path are required"}
+    job = DevJob(user_id=user.id, project_path=path, project_name=payload.get("name") or "",
+                 goal=goal, notify=bool(payload.get("notify", True)))
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    asyncio.create_task(run_job(job.id, user.display_name or ""))
+    return {"id": str(job.id), "status": job.status}
+
+
+@router.get("/jobs")
+async def list_jobs(user: CurrentUser, session: SessionDep) -> dict:
+    from app.models.dev_job import DevJob
+    rows = (await session.execute(
+        select(DevJob).where(DevJob.user_id == user.id).order_by(DevJob.created_at.desc()).limit(20)
+    )).scalars().all()
+    return {"jobs": [{
+        "id": str(j.id), "goal": j.goal, "project": j.project_name, "status": j.status,
+        "branch": j.branch, "pr_url": j.pr_url, "note": j.note, "question": j.question,
+    } for j in rows]}
+
+
+@router.post("/jobs/{job_id}/reply")
+async def reply_job(job_id: str, payload: dict, user: CurrentUser, session: SessionDep) -> dict:
+    """Answer a 'needs_you' job — resumes the Claude Code session with your reply."""
+    import uuid as _uuid
+    from app.models.dev_job import DevJob
+    from app.services.job_runner import resume_job
+    try:
+        jid = _uuid.UUID(job_id)
+    except ValueError:
+        return {"error": "bad id"}
+    job = await session.get(DevJob, jid)
+    if job is None or job.user_id != user.id:
+        return {"error": "not found"}
+    answer = (payload.get("answer") or "").strip()
+    if not answer:
+        return {"error": "answer required"}
+    asyncio.create_task(resume_job(job.id, answer, user.display_name or ""))
+    return {"ok": True}
+
+
+@router.get("/intel")
+async def intel(path: str, user: CurrentUser) -> dict:
+    """Git state + PRD/phases for a local project, so Olwen can advise where
+    Claude Code stopped and what to resume."""
+    from app.services.project_intel import gather_intel
+    return await asyncio.to_thread(gather_intel, path)
+
+
+@router.post("/conduct")
+async def conduct(payload: dict, user: CurrentUser) -> dict:
+    """One step of Olwen supervising Claude Code: given the goal + terminal
+    snapshot, return the next instruction to type (or done/blocked)."""
+    from app.services.conductor import conduct_step
+    if not user.llm_api_key_enc:
+        return {"action": "blocked", "message": "", "note": "Connect a Claude key in Settings to let Olwen run Claude Code."}
+    key = decrypt_secret(user.llm_api_key_enc)
+    return await conduct_step(
+        key,
+        goal=str(payload.get("goal") or ""),
+        output=str(payload.get("output") or ""),
+        transcript=payload.get("transcript") or [],
+    )
+
+
 @router.post("/open-in-finder")
 async def open_in_finder(payload: dict, user: CurrentUser) -> dict:
     """Open the given path in the host's native file browser.

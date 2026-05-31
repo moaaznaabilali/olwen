@@ -4,10 +4,12 @@
    terminal opens cwd'd into that project. */
 import { computed, nextTick, onMounted, ref } from 'vue'
 import OlwenEntity from './OlwenEntity.vue'
-import TerminalApp from './TerminalApp.vue'
 import type { GhProject, LocalProject } from '../composables/useDevMode'
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{
+  close: []
+  enterStudio: [projects: { name: string; path: string; autoStart?: string | null }[]]
+}>()
 
 const { projects } = useDevMode()
 
@@ -20,23 +22,6 @@ const filter = ref('')
 const entered = ref(false)
 const error = ref('')
 
-// Terminal session — when a local project is picked
-const terminal = ref<{ cwd: string; title: string; autoStart: string | null } | null>(null)
-
-async function openInFinder(path: string) {
-  const apiBase = useRuntimeConfig().public.apiBase as string
-  const token = localStorage.getItem('olwen_access') || ''
-  try {
-    await fetch(`${apiBase}/api/devmode/open-in-finder`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ path }),
-    })
-  } catch { /* non-fatal */ }
-}
 
 // Banner text typed out like a TTY boot sequence
 const banner = ref('')
@@ -72,25 +57,16 @@ const filteredGithub = computed(() => {
 })
 
 function pickLocal(p: LocalProject) {
-  // 1. Open the project folder in the host's Finder
-  openInFinder(p.path)
-  // 2. Open the terminal cd'd to the project, auto-running Claude Code in
-  //    --dangerously-skip-permissions (yolo) mode so it doesn't ask before edits.
-  terminal.value = {
-    cwd: p.path,
-    title: `Terminal · ${p.name}`,
-    autoStart: 'claude --dangerously-skip-permissions',
-  }
+  // Drop straight into Dev Studio — a full terminal cd'd into the project,
+  // running Claude Code, with the creature + live intel rail. We deliberately
+  // DON'T pop Finder: on macOS, activating Finder yanks you to another Space.
+  emit('enterStudio', [{ name: p.name, path: p.path, autoStart: 'claude --dangerously-skip-permissions' }])
 }
 function pickGithub(r: GhProject) {
   try { navigator.clipboard.writeText(`git clone ${r.clone_url}`) } catch { /* */ }
-  terminal.value = {
-    cwd: homeDir.value,
-    title: `Terminal · clone ${r.name}`,
-    autoStart: null,
-  }
+  // Clone case: open a plain shell at home (the clone command is on your clipboard).
+  emit('enterStudio', [{ name: `clone ${r.name}`, path: homeDir.value, autoStart: null }])
 }
-function closeTerminal() { terminal.value = null }
 
 async function load() {
   loading.value = true; error.value = ''
@@ -123,7 +99,7 @@ function close() {
 
 // ESC to exit
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !terminal.value) close()
+  if (e.key === 'Escape') close()
 }
 
 onMounted(async () => {
@@ -228,14 +204,6 @@ onMounted(async () => {
       <span class="footer__bit">esc to exit</span>
     </div>
 
-    <!-- The terminal becomes available when a project is chosen -->
-    <TerminalApp
-      v-if="terminal"
-      :cwd="terminal.cwd"
-      :title="terminal.title"
-      :auto-start="terminal.autoStart"
-      @close="closeTerminal"
-    />
   </div>
 </template>
 

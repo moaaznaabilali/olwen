@@ -12,6 +12,7 @@ import NewsBrief from './NewsBrief.vue'
 import AppsDock from './AppsDock.vue'
 import TerminalApp from './TerminalApp.vue'
 import DevMode from './DevMode.vue'
+import DevStudio from './DevStudio.vue'
 import ComputerUse from './ComputerUse.vue'
 import type { Brief } from '../composables/useBrief'
 import type { NewsItem } from '../composables/useNews'
@@ -141,6 +142,15 @@ const devModeOpen = ref(false)
 function enterDevMode() { devModeOpen.value = true }
 function exitDevMode() { devModeOpen.value = false }
 
+// Dev Studio — live split-terminal coding workspace
+const devStudioOpen = ref(false)
+function exitDevStudio() { devStudioOpen.value = false }
+function openDevStudio(projects: { name: string; path: string; autoStart?: string | null }[]) {
+  useState<{ name: string; path: string; autoStart?: string | null }[]>('devstudio:incoming', () => []).value = projects
+  devModeOpen.value = false
+  devStudioOpen.value = true
+}
+
 // Computer Use — Olwen drives the user's mouse + keyboard via olwen-bridge
 const computerUseOpen = ref(false)
 function exitComputerUse() { computerUseOpen.value = false }
@@ -174,6 +184,9 @@ watch(() => olwen.lastUiAction.value, (val) => {
       break
     }
     case 'open_dev_mode':           devModeOpen.value = true; break
+    case 'open_dev_studio':
+      openDevStudio((a.projects as { name: string; path: string; autoStart?: string | null }[]) || [])
+      break
     case 'open_computer_use': {
       const instr = (a.instruction as string) || ''
       computerUseOpen.value = true
@@ -550,7 +563,8 @@ const priorityColor: Record<string, string> = {
     />
 
     <!-- Dev mode focus environment (full-screen overlay) -->
-    <DevMode v-if="devModeOpen" @close="exitDevMode" />
+    <DevMode v-if="devModeOpen" @close="exitDevMode" @enter-studio="openDevStudio" />
+    <DevStudio v-if="devStudioOpen" @close="exitDevStudio" />
 
     <!-- Computer Use — Olwen drives the OS-level mouse/keyboard via olwen-bridge -->
     <div v-if="computerUseOpen" class="cu-overlay" role="dialog" aria-label="Computer Use">

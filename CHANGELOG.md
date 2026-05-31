@@ -2,6 +2,45 @@
 
 All notable changes to Olwen are documented here.
 
+## v0.3.0 — Dev Studio & unattended autonomy
+
+Olwen stops being a tool you operate and becomes a teammate who works while you're
+away. v0.3.0 turns the old project picker into **Dev Studio** — a project cockpit
+where Olwen manages Claude Code for you, and can finish work, open a PR, and message
+you when it's done, all without you watching.
+
+### Added
+
+- **Dev Studio** — a cockpit per project: movable/resizable terminal windows, the
+  Olwen creature, and a live rail that reads the project's **git state + PRD/phases**
+  ("where you stopped", recent commits, phase progress) from a new `/api/devmode/intel`.
+- **Olwen orchestrates Claude Code.** Tell Olwen a goal in your own words — he
+  *interprets* it like a brief to an engineer (typos and all), types it into the
+  running Claude Code session, reads the terminal, and steers it to completion. The
+  managing brain is cheap (Haiku); the actual coding is your Claude Code subscription.
+- **Activity view** — a plain-language, live picture of what Claude Code is doing
+  ("Looking at the site footer", "Building the project") for non-developers, plus an
+  optional live preview of the project's running app. Zero extra tokens.
+- **Unattended autonomy — give a goal, walk away, get a PR.** A server-side job
+  runner runs `claude -p` headless on a fresh branch, commits, opens a PR, and pings
+  you on WhatsApp when done. Jobs run in **parallel** (bounded pool) and survive the
+  browser closing.
+- **Reply-to-continue.** When a job genuinely needs a decision it goes *needs you*,
+  asks a real question, and your reply (in the app, or over WhatsApp) **resumes the
+  same Claude Code session** and finishes the work.
+- **Guardrails for unattended runs.** A PreToolUse hook blocks anything irreversible
+  or outward-facing — push to a remote/main, deploy/publish, `rm -rf`, `sudo`,
+  `ssh`, database drops — even under bypass mode. Olwen alone pushes to a branch and
+  opens a PR; nothing lands on main without your merge.
+- **Live, resilient terminal.** The Dev Studio terminal auto-reconnects (and
+  relaunches Claude Code) if the connection drops, so the session stays alive.
+
+### Changed
+
+- Picking a project drops straight into Dev Studio (no Finder pop — which on macOS
+  yanked you to another Space).
+- More forgiving intent routing now also catches coding intents ("let's code").
+
 ## v0.2.0 — Olwen learns to use your computer
 
 The first release made Olwen a calm companion: a creature at the edge of your

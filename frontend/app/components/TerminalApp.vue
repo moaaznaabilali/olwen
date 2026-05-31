@@ -4,7 +4,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppWindow from './AppWindow.vue'
 
-const props = defineProps<{ cwd?: string | null; title?: string; autoStart?: string | null }>()
+const props = defineProps<{ cwd?: string | null; title?: string; autoStart?: string | null; embedded?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const containerRef = ref<HTMLElement>()
@@ -28,6 +28,59 @@ let term: XTerminal | null = null
 let fitAddon: XFitAddon | null = null
 let ws: WebSocket | null = null
 let resizeObs: ResizeObserver | null = null
+let outBuf = ''           // rolling plain-text capture for the conductor
+let lastDataAt = 0        // ms timestamp of the last byte (for idle detection)
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let manualClose = false
+let reconnects = 0
+
+function connect() {
+  const token = localStorage.getItem('olwen_access') || ''
+  const apiBase = useRuntimeConfig().public.apiBase as string
+  const wsBase = apiBase.replace(/^http/, 'ws')
+  const q = new URLSearchParams({ token })
+  if (props.cwd) q.set('cwd', props.cwd)
+  ws = new WebSocket(`${wsBase}/api/apps/terminal/ws?${q.toString()}`)
+  ws.binaryType = 'arraybuffer'
+
+  ws.onopen = () => {
+    isConnected.value = true
+    statusText.value = 'connected'
+    reconnects = 0
+    ws?.send(JSON.stringify({ type: 'resize', cols: term!.cols, rows: term!.rows }))
+    // Auto-run the starting command (e.g. claude) so a reconnect relaunches it too.
+    if (props.autoStart) {
+      const cmd = props.autoStart.trim() + '\n'
+      setTimeout(() => { if (ws?.readyState === WebSocket.OPEN) ws.send(cmd) }, 650)
+    }
+  }
+  ws.onmessage = (ev) => {
+    let s: string
+    if (typeof ev.data === 'string') { s = ev.data; term!.write(s) }
+    else { const u = new Uint8Array(ev.data); term!.write(u); s = new TextDecoder().decode(u) }
+    // Rolling plain-text buffer so Olwen's conductor can read what Claude Code shows.
+    outBuf += s
+    if (outBuf.length > 60000) outBuf = outBuf.slice(-60000)
+    lastDataAt = Date.now()
+  }
+  ws.onclose = (ev) => {
+    isConnected.value = false
+    if (manualClose) return
+    if (ev.code === 4401) { statusText.value = 'auth rejected'; return }
+    // Unexpected drop (backend reload, network blip) — keep the terminal LIVE by
+    // reconnecting and relaunching, so what Olwen runs is always visible here.
+    if (reconnects < 8) {
+      reconnects++
+      statusText.value = 'reconnecting…'
+      term?.write('\r\n\x1b[2;36m── reconnecting… ──\x1b[0m\r\n')
+      reconnectTimer = setTimeout(connect, 1200)
+    } else {
+      statusText.value = 'disconnected'
+      term?.write('\r\n\x1b[2;31m── disconnected ──\x1b[0m\r\n')
+    }
+  }
+  ws.onerror = () => { statusText.value = 'error' }
+}
 
 async function mountTerminal() {
   if (!containerRef.value) return
@@ -75,37 +128,7 @@ async function mountTerminal() {
   fitAddon.fit()
   term.focus()
 
-  // Connect WebSocket — JWT in query string (browser WS can't set headers)
-  const token = localStorage.getItem('olwen_access') || ''
-  const apiBase = useRuntimeConfig().public.apiBase as string
-  const wsBase = apiBase.replace(/^http/, 'ws')
-  const q = new URLSearchParams({ token })
-  if (props.cwd) q.set('cwd', props.cwd)
-  ws = new WebSocket(`${wsBase}/api/apps/terminal/ws?${q.toString()}`)
-  ws.binaryType = 'arraybuffer'
-
-  ws.onopen = () => {
-    isConnected.value = true
-    statusText.value = 'connected'
-    // Send initial size so the shell knows the window dims
-    ws?.send(JSON.stringify({ type: 'resize', cols: term!.cols, rows: term!.rows }))
-    // Auto-run a starting command (e.g. "claude --dangerously-skip-permissions")
-    // after a short delay so the user's shell init (zshrc, etc.) finishes first.
-    if (props.autoStart) {
-      const cmd = props.autoStart.trim() + '\n'
-      setTimeout(() => { if (ws?.readyState === WebSocket.OPEN) ws.send(cmd) }, 650)
-    }
-  }
-  ws.onmessage = (ev) => {
-    if (typeof ev.data === 'string') term!.write(ev.data)
-    else term!.write(new Uint8Array(ev.data))
-  }
-  ws.onclose = (ev) => {
-    isConnected.value = false
-    statusText.value = ev.code === 4401 ? 'auth rejected' : 'disconnected'
-    term?.write(`\r\n\x1b[2;36m── session ended ──\x1b[0m\r\n`)
-  }
-  ws.onerror = () => { statusText.value = 'error' }
+  connect()
 
   term.onData(d => { if (ws?.readyState === WebSocket.OPEN) ws.send(d) })
   term.onResize(({ cols, rows }) => {
@@ -133,8 +156,39 @@ function startClaude() {
   }
 }
 
+// Let a host (Dev Studio) type into this terminal — e.g. relay a prompt into the
+// running Claude Code session. Claude Code's TUI (Ink) only treats Enter as
+// "submit" when it arrives as its OWN keystroke, a beat after the text — glued on
+// the same chunk it's swallowed as a newline. So type the text, then send Enter
+// separately (twice, with delays, to be robust).
+function sendInput(data: string, submit = false) {
+  if (ws?.readyState !== WebSocket.OPEN) return false
+  ws.send(data)
+  if (submit) {
+    setTimeout(() => { if (ws?.readyState === WebSocket.OPEN) ws.send('\r') }, 180)
+    setTimeout(() => { if (ws?.readyState === WebSocket.OPEN) ws.send('\r') }, 420)
+  }
+  term?.focus()
+  return true
+}
+// ANSI/control-stripped view of the recent terminal, for Olwen to read.
+function getOutput(): string {
+  return outBuf
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')   // OSC
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')          // CSI
+    .replace(/\x1b[()][AB0-2]/g, '')                    // charset
+    .replace(/\x1b[=>]/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')    // other control chars (keep \n, \t)
+    .split('\n').map(l => l.replace(/\s+$/, '')).filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n')
+    .slice(-8000)
+}
+function idleFor(): number { return lastDataAt ? Date.now() - lastDataAt : 0 }
+defineExpose({ sendInput, getOutput, idleFor })
+
 onMounted(async () => { await nextTick(); await mountTerminal() })
 onBeforeUnmount(() => {
+  manualClose = true
+  if (reconnectTimer) clearTimeout(reconnectTimer)
   resizeObs?.disconnect()
   try { ws?.close() } catch { /* */ }
   try { term?.dispose() } catch { /* */ }
@@ -142,7 +196,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppWindow :title="title || 'Terminal'" glyph="▢" color="#5EEAD4" :initial-width="920" :initial-height="540" @close="emit('close')">
+  <!-- Embedded: just the terminal + a slim toolbar, filling its parent (the host
+       provides the window chrome / drag / close). -->
+  <div v-if="embedded" class="term-embed">
+    <div class="embed-tools">
+      <span class="status" :class="{ on: isConnected }">{{ statusText }}</span>
+      <button class="tool" title="Launch Claude Code" @click="startClaude">✦ claude</button>
+      <button class="tool" title="Send Ctrl+C" @click="sendCtrlC">⌃C</button>
+    </div>
+    <div ref="containerRef" class="term" />
+  </div>
+
+  <AppWindow v-else :title="title || 'Terminal'" glyph="▢" color="#5EEAD4" :initial-width="920" :initial-height="540" @close="emit('close')">
     <template #header>
       <div class="tools">
         <span class="status" :class="{ on: isConnected }">{{ statusText }}</span>
@@ -172,4 +237,9 @@ onBeforeUnmount(() => {
 .tool:hover { background: rgba(94,234,212,0.16); color: #ECFEFF; border-color: #5EEAD4; }
 
 .term { width: 100%; height: 100%; padding: 8px 4px 0 10px; box-sizing: border-box; background: #02060A; }
+
+/* Embedded mode — fill the host window, slim toolbar, no chrome. */
+.term-embed { display: flex; flex-direction: column; width: 100%; height: 100%; background: #02060A; }
+.embed-tools { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid rgba(94,234,212,0.12); flex-shrink: 0; }
+.term-embed .term { flex: 1; height: auto; min-height: 0; }
 </style>

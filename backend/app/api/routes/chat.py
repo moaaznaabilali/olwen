@@ -37,6 +37,9 @@ _AGENT_INTENT = re.compile(
     r"|\b(mess?age|whats\s*app|tele\s*gram|wa|tg)\b.*\b(me|him|her|them|to|say|saying|that)\b"
     r"|\b(send|text|tell)\b.*\b(whats\s*app|tele\s*gram|message|mesage)\b"
     r"|\b(begin|start)\s+work(ing)?\b"
+    r"|\b(let'?s|lets)\s+(code|build|hack|ship)\b"
+    r"|\b(coding|dev|developer)\s+(session|studio|mode)\b"
+    r"|\b(start|open)\s+(coding|a\s+coding)\b"
     r"|\b(claude|claude\s*code|code\s+mode)\b",
     re.IGNORECASE,
 )

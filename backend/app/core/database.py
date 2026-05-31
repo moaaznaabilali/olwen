@@ -36,6 +36,7 @@ async def init_models() -> None:
     from app.models import (  # noqa: F401
         app_config,
         custom_skill,
+        dev_job,
         email_account,
         email_otp,
         github_account,

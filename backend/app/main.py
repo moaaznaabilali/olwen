@@ -32,7 +32,14 @@ from app.core.database import init_models
 async def lifespan(app: FastAPI):
     # Dev convenience: ensure tables exist. Replace with Alembic migrations later.
     await init_models()
+    # Unattended dev jobs: re-pick anything orphaned by a restart, and watch for
+    # WhatsApp replies to "needs_you" jobs.
+    import asyncio as _aio
+    from app.services.job_runner import redispatch_queued, whatsapp_reply_poller
+    await redispatch_queued()
+    _poller = _aio.create_task(whatsapp_reply_poller())
     yield
+    _poller.cancel()
 
 
 app = FastAPI(title=f"{settings.app_name} API", version="0.1.0", lifespan=lifespan)
