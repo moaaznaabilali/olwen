@@ -5,6 +5,32 @@ Thanks for caring about Olwen.
 This is a personal project at heart — built by one person — but help is
 welcome wherever you see something rough or missing.
 
+## Getting started
+
+```bash
+# 1. Clone
+git clone https://github.com/moaaznaabilali/olwen.git
+cd olwen
+
+# 2. Backend — Python venv + deps
+python3 -m venv backend/.venv
+backend/.venv/bin/pip install -r backend/requirements.txt
+
+# 3. Frontend — install deps
+cd frontend && pnpm install && cd ..
+
+# 4. Run both — backend on :8000, frontend on :3100
+./start.sh
+```
+
+Then open <http://localhost:3100>. `./start.sh` runs both servers and
+Ctrl-C stops them together.
+
+### Opening a pull request
+
+Fork, branch, and open a PR against `main`. Keep it small — one thing per
+PR. See [Pull requests](#pull-requests) below for the full rhythm.
+
 ## Quick principles
 
 - **Quiet by default.** Olwen never pings, beeps, or surprises. Any new
