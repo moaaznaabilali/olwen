@@ -149,6 +149,11 @@ async def run_job(job_id: uuid.UUID, self_name: str = "") -> None:
         async with _SEM:                       # bounded parallelism (queues here)
             try:
                 await _set(db, job, status="running")
+                # Isolate from any pre-existing working-tree changes so the job's
+                # PR contains ONLY its own work (no stray uncommitted files).
+                _, dpre = await _run(job.project_path, "git", "status", "--porcelain", timeout=15)
+                if dpre.strip():
+                    await _run(job.project_path, "git", "stash", "push", "-u", "-m", f"olwen-job-{job.id}", timeout=25)
                 branch = f"olwen/{_slug(goal)}-{str(job.id)[:6]}"
                 rc, out = await _run(job.project_path, "git", "checkout", "-B", branch, timeout=20)
                 if rc != 0:

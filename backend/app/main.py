@@ -21,6 +21,7 @@ from app.api.routes import (
     skills as skills_routes,
     strava as strava_routes,
     tasks,
+    telegram as telegram_routes,
     users,
     voice as voice_routes,
 )
@@ -36,10 +37,13 @@ async def lifespan(app: FastAPI):
     # WhatsApp replies to "needs_you" jobs.
     import asyncio as _aio
     from app.services.job_runner import redispatch_queued, whatsapp_reply_poller
+    from app.services.telegram_bot import telegram_poller
     await redispatch_queued()
     _poller = _aio.create_task(whatsapp_reply_poller())
+    _tg = _aio.create_task(telegram_poller())
     yield
     _poller.cancel()
+    _tg.cancel()
 
 
 app = FastAPI(title=f"{settings.app_name} API", version="0.1.0", lifespan=lifespan)
@@ -70,6 +74,7 @@ app.include_router(strava_routes.router, prefix="/api/strava", tags=["strava"])
 app.include_router(apps_routes.router, prefix="/api/apps", tags=["apps"])
 app.include_router(devmode_routes.router, prefix="/api/devmode", tags=["devmode"])
 app.include_router(computer_routes.router, prefix="/api/computer", tags=["computer"])
+app.include_router(telegram_routes.router, prefix="/api/telegram", tags=["telegram"])
 
 
 @app.get("/")

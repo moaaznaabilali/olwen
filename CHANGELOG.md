@@ -2,6 +2,27 @@
 
 All notable changes to Olwen are documented here.
 
+## v0.3.1 — Olwen on Telegram
+
+Olwen goes mobile. Link a Telegram bot and run your day — and start coding jobs —
+from your phone.
+
+### Added
+
+- **Telegram link.** Connect a bot in **Settings → Connections → Telegram** (create
+  it with @BotFather, paste the token, send `/start`), then text Olwen from anywhere:
+  add or check tasks, send a WhatsApp, read your day, or kick off an unattended coding
+  job — and he replies in the chat. It's a local long-polling bot (no public webhook),
+  your token is stored encrypted, and only the chat you link can command him.
+- **`queue_dev_job` tool** — start an unattended Dev Studio job straight from chat
+  ("run a job in *my-site*: fix the failing tests") → Olwen opens a PR and pings you.
+  Telegram becomes the mobile remote for the autonomy in v0.3.0.
+
+### Fixed
+
+- Unattended jobs now stash any pre-existing working-tree changes before branching,
+  so a job's pull request contains only its own work.
+
 ## v0.3.0 — Dev Studio & unattended autonomy
 
 Olwen stops being a tool you operate and becomes a teammate who works while you're

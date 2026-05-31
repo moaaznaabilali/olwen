@@ -24,6 +24,9 @@ class User(Base):
     gemini_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     groq_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_provider: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 'claude'|'gemini'|'groq'
+    # Telegram: chat with Olwen + run tasks from your phone (two-way channel).
+    telegram_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # bot token (encrypted)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # your chat once /start'd
 
     # Voice preferences
     voice_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

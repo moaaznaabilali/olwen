@@ -230,8 +230,39 @@ onMounted(async () => {
     if (settings.value.news_topics?.length) newsTopics.value = settings.value.news_topics
   } catch { /* */ }
   loadTopics()
-  loadMem(); loadSkills(); loadEmail(); loadGithub(); loadGoogleOAuthState()
+  loadMem(); loadSkills(); loadEmail(); loadGithub(); loadGoogleOAuthState(); loadTelegram()
 })
+
+/* ---- Telegram link ---- */
+const _apiBase = useRuntimeConfig().public.apiBase as string
+function _authH(): Record<string, string> {
+  const t = import.meta.client ? localStorage.getItem('olwen_access') : null
+  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
+}
+const tg = ref<{ connected: boolean; linked: boolean; bot?: string; link?: string }>({ connected: false, linked: false })
+const tgToken = ref('')
+const tgBusy = ref(false)
+const tgError = ref('')
+async function loadTelegram() {
+  try {
+    const r = await fetch(`${_apiBase}/api/telegram/status`, { headers: _authH() })
+    if (r.ok) { const d = await r.json(); tg.value = { ...tg.value, connected: !!d.connected, linked: !!d.linked } }
+  } catch { /* */ }
+}
+async function connectTelegram() {
+  const t = tgToken.value.trim(); if (!t) return
+  tgBusy.value = true; tgError.value = ''
+  try {
+    const r = await fetch(`${_apiBase}/api/telegram/connect`, { method: 'POST', headers: _authH(), body: JSON.stringify({ token: t }) })
+    const d = await r.json()
+    if (d.error) tgError.value = d.error
+    else { tgToken.value = ''; tg.value = { connected: true, linked: false, bot: d.bot, link: d.link } }
+  } catch { tgError.value = 'Could not reach the backend.' } finally { tgBusy.value = false }
+}
+async function disconnectTelegram() {
+  try { await fetch(`${_apiBase}/api/telegram/disconnect`, { method: 'DELETE', headers: _authH() }) } catch { /* */ }
+  tg.value = { connected: false, linked: false }
+}
 
 const activeProvider = computed(() => settings.value?.active_provider ?? null)
 const anyConnected = computed(() => porder.some(p => settings.value?.[p]?.connected))
@@ -351,6 +382,41 @@ const fmtStars = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\
               @connected="onGithubConnected"
               @cancel="ghShowWizard = false"
             />
+          </div>
+
+          <!-- Telegram: chat with Olwen from your phone -->
+          <div class="ghcard">
+            <div class="ghcard__head">
+              <div class="ghcard__name">Telegram <span class="tag">chat &amp; tasks</span></div>
+              <span v-if="tg.connected" class="badge--on">{{ tg.linked ? 'Linked' : 'Awaiting /start' }}</span>
+            </div>
+            <template v-if="tg.connected">
+              <p class="pane__desc" style="margin: 4px 0 12px;">
+                {{ tg.linked
+                  ? 'Text Olwen anything — add tasks, send a message, check your day, or run a coding job. He replies in Telegram.'
+                  : 'Almost there — open Telegram and send your bot /start to link your chat.' }}
+              </p>
+              <div class="ghrow">
+                <div class="ghrow__main">
+                  <span class="ghrow__name">@{{ tg.bot || 'your bot' }}</span>
+                  <a v-if="tg.link" :href="tg.link" target="_blank" rel="noopener" class="ghrow__sub">open in Telegram ↗</a>
+                  <span v-else class="ghrow__sub">connected</span>
+                </div>
+                <button class="btn btn--ghost" @click="disconnectTelegram">Disconnect</button>
+              </div>
+            </template>
+            <template v-else>
+              <p class="pane__desc" style="margin: 4px 0 10px;">
+                Create a bot in <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>
+                (send <code>/newbot</code>), paste the token here, then send your bot <code>/start</code>.
+              </p>
+              <div class="ghrow">
+                <input v-model="tgToken" class="field" type="password" placeholder="123456:ABC-your-bot-token…"
+                       style="flex:1;" @keyup.enter="connectTelegram">
+                <button class="btn btn--primary" :disabled="tgBusy" @click="connectTelegram">{{ tgBusy ? 'Verifying…' : 'Connect' }}</button>
+              </div>
+              <p v-if="tgError" class="pane__desc" style="color:#FCA5A5; margin-top:8px;">{{ tgError }}</p>
+            </template>
           </div>
         </div>
 

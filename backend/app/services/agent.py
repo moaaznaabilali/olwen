@@ -90,6 +90,20 @@ _UI_DECLS = [
         }},
     },
     {
+        "name": "queue_dev_job",
+        "description": (
+            "Queue an UNATTENDED coding job: Olwen runs Claude Code on the goal in a "
+            "local project, on a fresh branch behind safety guardrails, opens a pull "
+            "request, and pings you when done. Use when the user says 'run a job', "
+            "'fix X in <project> while I'm away', 'build Y in <project>', etc. Great "
+            "from Telegram. Give the project name hint and a clear goal."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "project": {"type": "string", "description": "project name hint (which repo)"},
+            "goal": {"type": "string", "description": "what to build or fix"},
+        }, "required": ["goal"]},
+    },
+    {
         "name": "open_project",
         "description": (
             "Open one specific local project directly: pops Finder, opens a terminal cd'd into "
@@ -412,6 +426,35 @@ async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -
     if name == "open_dev_mode":
         return {"ui_action": "open_dev_mode", "ok": True,
                 "say": "Entering dev mode. Pick a project to start."}
+
+    if name == "queue_dev_job":
+        import asyncio as _aio
+        from pathlib import Path as _P
+        from app.api.routes.devmode import _scan_local
+        from app.models.dev_job import DevJob
+        from app.services.job_runner import run_job
+        goal = (args.get("goal") or "").strip()
+        if not goal:
+            return {"error": "missing goal"}
+        rows = await _aio.to_thread(_scan_local, _P.home())
+        if not rows:
+            return {"error": "No local git projects found."}
+        hint = (args.get("project") or "").strip().lower()
+        target = None
+        if hint:
+            for r in rows:
+                if hint in r["name"].lower() or hint in r["rel"].lower():
+                    target = r; break
+        if target is None:
+            target = rows[0]
+        job = DevJob(user_id=user.id, project_path=target["path"],
+                     project_name=target["name"], goal=goal, notify=True)
+        session.add(job)
+        await session.commit()
+        await session.refresh(job)
+        _aio.create_task(run_job(job.id, user.display_name or ""))
+        return {"ok": True, "say": (f"Started a job on {target['name']}: {goal}. "
+                                    "I'll open a PR and ping you when it's done.")}
 
     if name == "open_dev_studio":
         import asyncio as _aio

@@ -49,3 +49,11 @@ async def init_models() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Lightweight additive migrations for columns added to existing tables
+        # (create_all won't alter an existing table). Idempotent.
+        from sqlalchemy import text
+        for stmt in (
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_token_enc TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)",
+        ):
+            await conn.execute(text(stmt))
