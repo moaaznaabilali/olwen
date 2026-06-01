@@ -11,8 +11,8 @@ OPTIONS = {
         "CFBundleName": "Olwen",
         "CFBundleDisplayName": "Olwen",
         "CFBundleIdentifier": "com.olwen.app",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "0.1.0",
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "0.4.0",
         "LSUIElement": False,             # show in Dock (False = real app, not menu-bar-only)
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.productivity",

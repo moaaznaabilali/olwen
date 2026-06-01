@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP=dist/Olwen.app
-VERSION="0.2.0"
+VERSION="0.4.0"
 FINAL="dist/Olwen-${VERSION}.dmg"
 BG=resources/dmg-background.png
 
