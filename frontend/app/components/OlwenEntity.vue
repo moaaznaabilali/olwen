@@ -8,14 +8,18 @@
 -->
 
 <template>
-  <div class="olwen-entity-wrapper">
+  <div
+    class="olwen-entity-wrapper"
+    :class="{ receiving }"
+    :style="{ '--recv': recvColor }"
+  >
     <svg
       ref="svgRef"
       width="100%"
       viewBox="0 0 400 460"
       xmlns="http://www.w3.org/2000/svg"
       class="olwen-entity"
-      :class="`state-${state}`"
+      :class="[`state-${state}`, { receiving }]"
       role="img"
       aria-label="Olwen entity"
     >
@@ -258,24 +262,74 @@
         <path :d="reachD" class="reach-tendril" fill="none" stroke="url(#olwen-tendril)" stroke-width="7" stroke-linecap="round"/>
         <path :d="reachD" class="reach-tendril-core" fill="none" stroke="#A7F3D0" stroke-width="2.5" stroke-linecap="round"/>
       </g>
+
+      <!-- RECEIVE REACTION: one-shot ripple of recognition when a notification arrives. -->
+      <!-- Layered ON TOP; separate elements so the body/tendril/state animations are untouched. -->
+      <g v-if="receiving" class="recv-group" aria-hidden="true">
+        <!-- Soft bloom flash over the core (does NOT touch .body-core's own animation) -->
+        <circle class="recv-bloom" cx="200" cy="195" r="70" fill="var(--recv, #5EEAD4)"/>
+        <!-- Expanding rings emanating from the core center -->
+        <circle class="recv-ring recv-ring-1" cx="200" cy="195" r="60" fill="none"
+          stroke="var(--recv, #5EEAD4)" stroke-width="3"/>
+        <circle class="recv-ring recv-ring-2" cx="200" cy="195" r="60" fill="none"
+          stroke="var(--recv, #5EEAD4)" stroke-width="2"/>
+      </g>
     </svg>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   state?: 'idle' | 'listening' | 'thinking' | 'speaking' | 'working'
   // screen-space point (clientX/clientY) for a tendril to reach toward; null = retract
   reachTarget?: { x: number, y: number } | null
-}>()
+  // monotonically increasing counter — bumps each time a notification arrives
+  pulse?: number
+  // the channel the notification arrived on
+  pulseKind?: string
+}>(), {
+  pulse: 0,
+  pulseKind: '',
+})
 
 const svgRef = ref<SVGSVGElement>()
 const reachD = ref('')
 let raf = 0
 let phase = 0
 let lastT = 0
+
+// --- "receive" reaction: a one-shot ripple of recognition on incoming notifications ---
+const receiving = ref(false)
+const recvColor = ref('var(--accent, #5EEAD4)')
+let recvTimer: ReturnType<typeof setTimeout> | null = null
+
+function kindColor(kind: string): string {
+  switch (kind) {
+    case 'telegram': return '#34B7F1'
+    case 'whatsapp': return '#25D366'
+    case 'email':    return '#FBBF24'
+    default:         return 'var(--accent, #5EEAD4)'
+  }
+}
+
+watch(() => props.pulse, (n, o) => {
+  // only react when the counter genuinely increases (a new arrival)
+  if ((n ?? 0) <= (o ?? 0)) return
+  recvColor.value = kindColor(props.pulseKind || '')
+  // reset any in-flight reaction so rapid arrivals re-trigger cleanly
+  if (recvTimer) clearTimeout(recvTimer)
+  receiving.value = false
+  // force a fresh paint cycle so the one-shot animations restart
+  requestAnimationFrame(() => {
+    receiving.value = true
+    recvTimer = setTimeout(() => {
+      receiving.value = false
+      recvTimer = null
+    }, 1100)
+  })
+})
 
 // the tendrils all originate around (200, 200) in the SVG's own coordinates
 const ORIGIN = { x: 200, y: 202 }
@@ -326,7 +380,10 @@ function frame(t: number) {
 }
 
 onMounted(() => { raf = requestAnimationFrame(frame) })
-onBeforeUnmount(() => cancelAnimationFrame(raf))
+onBeforeUnmount(() => {
+  cancelAnimationFrame(raf)
+  if (recvTimer) clearTimeout(recvTimer)
+})
 </script>
 
 <style scoped>
@@ -500,6 +557,62 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .state-working .body-core { animation-duration: 3s; }
 
 /* ============================================ */
+/* RECEIVE REACTION - one-shot ripple on arrival */
+/* Additive: layered over whatever state runs.   */
+/* ============================================ */
+
+/* Expanding rings emanate from the core center (200,195). */
+@keyframes olwen-recv-ring {
+  0%   { transform: scale(0.3);  opacity: 0; }
+  12%  { opacity: 0.8; }
+  100% { transform: scale(2.2);  opacity: 0; }
+}
+.recv-ring {
+  transform-origin: 200px 195px;
+  opacity: 0;
+}
+.receiving .recv-ring-1 {
+  animation: olwen-recv-ring 1s cubic-bezier(0.16, 0.84, 0.44, 1) both;
+}
+.receiving .recv-ring-2 {
+  animation: olwen-recv-ring 1.05s cubic-bezier(0.16, 0.84, 0.44, 1) 0.18s both;
+}
+
+/* Core bloom flash — a separate overlay circle, NOT the .body-core animation. */
+@keyframes olwen-recv-bloom {
+  0%   { transform: scale(0.7); opacity: 0; }
+  25%  { transform: scale(1);   opacity: 0.55; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+.recv-bloom {
+  transform-origin: 200px 195px;
+  opacity: 0;
+  mix-blend-mode: screen;
+  filter: url(#olwen-soft-glow);
+}
+.receiving .recv-bloom {
+  animation: olwen-recv-bloom 0.95s ease-out both;
+}
+
+/* Tendrils briefly energize — brighten via opacity (keeps inline soft-glow filter intact). */
+.tendrils,
+.tendril-highlights {
+  transition: opacity 0.9s ease-out;
+}
+.receiving .tendrils {
+  opacity: 1;
+  animation: olwen-recv-energize 1s ease-out both;
+}
+.receiving .tendril-highlights {
+  animation: olwen-recv-energize 1s ease-out both;
+}
+@keyframes olwen-recv-energize {
+  0%   { opacity: 1; }
+  18%  { opacity: 1.6; }   /* clamped to 1 by the engine — reads as a bright flick */
+  100% { opacity: 1; }
+}
+
+/* ============================================ */
 /* ACCESSIBILITY - respect reduced motion       */
 /* ============================================ */
 @media (prefers-reduced-motion: reduce) {
@@ -520,5 +633,19 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   .mote-6 {
     animation: none !important;
   }
+
+  /* RECEIVE: drop the expanding rings; keep only a brief core/tendril brighten. */
+  .recv-ring {
+    display: none;
+  }
+  .receiving .recv-bloom {
+    animation: olwen-recv-bloom-reduced 0.9s ease-out both;
+  }
+  @keyframes olwen-recv-bloom-reduced {
+    0%   { transform: scale(1); opacity: 0; }
+    30%  { opacity: 0.5; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+  /* the energize fade still reads as a gentle brighten — no scale/position motion */
 }
 </style>

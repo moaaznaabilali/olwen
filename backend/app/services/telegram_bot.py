@@ -97,6 +97,10 @@ async def _handle(token: str, chat_id: str, text: str) -> None:
                                "I'm Olwen. Tell me to add/check tasks, send a WhatsApp, "
                                "read your day, or run a coding job — and I'll do it.")
             return
+        # Surface the incoming message live on the dashboard.
+        from app.services.notifications import push
+        await push(user.id, "telegram", title="New Telegram message", body=text[:300],
+                   meta={"chat_id": chat_id})
         reply = await _agent_reply(text, user, db)
         await send_message(token, chat_id, reply)
 

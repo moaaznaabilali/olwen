@@ -3,6 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import OlwenEntity from './OlwenEntity.vue'
 import WidgetPanel from './WidgetPanel.vue'
 import TasksWidget from './TasksWidget.vue'
+import TasksBoard from './TasksBoard.vue'
+import AutomationsBoard from './AutomationsBoard.vue'
+import NotificationBell from './NotificationBell.vue'
+import NotificationToasts from './NotificationToasts.vue'
 import WorkMode from './WorkMode.vue'
 import EmailWorkMode from './EmailWorkMode.vue'
 import EmailReader from './EmailReader.vue'
@@ -22,6 +26,8 @@ import type { EmailMessage, TriagedEmail } from '../composables/useEmail'
 type EntityState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'working'
 
 const { user, logout } = useAuth()
+const { theme, toggle: toggleTheme } = useTheme()
+const { start: startNotifications, arrivals: notifPulse, lastKind: notifKind } = useNotifications()
 const showSettings = ref(false)
 
 // First name for the greeting / pill, from the real account.
@@ -141,6 +147,10 @@ const { open: openApps, closeApp } = useApps()
 const devModeOpen = ref(false)
 function enterDevMode() { devModeOpen.value = true }
 function exitDevMode() { devModeOpen.value = false }
+
+// Tasks board — full-screen view of all lists & tasks
+const tasksBoardOpen = ref(false)
+const automationsOpen = ref(false)
 
 // Dev Studio — live split-terminal coding workspace
 const devStudioOpen = ref(false)
@@ -315,6 +325,7 @@ async function loadWeather() {
 
 onMounted(async () => {
   clockTimer = setInterval(() => { now.value = new Date() }, 30_000)
+  startNotifications() // open the live notification stream
   loadWeather()
   // tasks load inside TasksWidget; HUD reads the shared store reactively.
 
@@ -399,6 +410,18 @@ const priorityColor: Record<string, string> = {
             <circle cx="12" cy="12" r="4" />
           </svg>
         </button>
+        <NotificationBell />
+        <button class="iconbtn" title="Automations — scheduled tasks & workflows" @click="automationsOpen = true">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+          </svg>
+        </button>
+        <button class="iconbtn" :title="theme === 'dark' ? 'Switch to light' : 'Switch to dark'" @click="toggleTheme">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
         <button class="iconbtn" title="Settings" @click="showSettings = true">⚙</button>
         <div class="userpill">
           <span class="userpill__dot" />
@@ -420,7 +443,7 @@ const priorityColor: Record<string, string> = {
     <main class="grid">
       <!-- LEFT -->
       <div class="col col--left">
-        <TasksWidget v-if="show('tasks')" @suggest="suggestTask" @review="startReview" />
+        <TasksWidget v-if="show('tasks')" @suggest="suggestTask" @review="startReview" @expand="tasksBoardOpen = true" />
         <GithubWidget v-if="show('github')" @open-settings="showSettings = true" />
       </div>
 
@@ -439,7 +462,7 @@ const priorityColor: Record<string, string> = {
 
         <div class="entity-hold">
           <div class="entity-frame" data-olwen>
-            <OlwenEntity :state="entityShown" />
+            <OlwenEntity :state="entityShown" :pulse="notifPulse" :pulse-kind="notifKind" />
           </div>
         </div>
 
@@ -565,6 +588,9 @@ const priorityColor: Record<string, string> = {
     <!-- Dev mode focus environment (full-screen overlay) -->
     <DevMode v-if="devModeOpen" @close="exitDevMode" @enter-studio="openDevStudio" />
     <DevStudio v-if="devStudioOpen" @close="exitDevStudio" />
+    <TasksBoard v-if="tasksBoardOpen" @close="tasksBoardOpen = false" />
+    <AutomationsBoard v-if="automationsOpen" @close="automationsOpen = false" />
+    <NotificationToasts />
 
     <!-- Computer Use — Olwen drives the OS-level mouse/keyboard via olwen-bridge -->
     <div v-if="computerUseOpen" class="cu-overlay" role="dialog" aria-label="Computer Use">
@@ -591,27 +617,27 @@ const priorityColor: Record<string, string> = {
 .brand-wrap { display: flex; align-items: baseline; gap: 12px; }
 .brand {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  letter-spacing: 4px; font-size: 15px; color: #5EEAD4;
+  letter-spacing: 4px; font-size: 15px; color: var(--accent);
 }
-.brand__sub { font-size: 11px; letter-spacing: 1.5px; color: rgba(167,243,208,0.4); }
+.brand__sub { font-size: 11px; letter-spacing: 1.5px; color: var(--text-muted); }
 .topbar__right { display: flex; align-items: center; gap: 14px; }
 .state-switch { display: flex; gap: 6px; }
 .state-switch button {
   padding: 5px 11px; border-radius: 999px;
-  border: 0.5px solid rgba(94,234,212,0.18); background: transparent;
-  color: rgba(167,243,208,0.6);
+  border: 0.5px solid var(--border-strong); background: transparent;
+  color: var(--text-muted);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
   transition: all .2s ease;
 }
 .state-switch button.active {
-  background: rgba(94,234,212,0.14); border-color: #5EEAD4; color: #ECFEFF;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--text-strong);
 }
 /* loading veil — "Olwen scans your day" */
 .reviewing {
   position: fixed; inset: 0; z-index: 55;
   display: grid; place-items: center;
-  background: radial-gradient(ellipse at 50% 45%, #08131a 0%, #02060A 72%);
+  background: radial-gradient(ellipse at 50% 45%, var(--bg-from) 0%, var(--bg-to) 72%);
 }
 .reviewing__core { position: relative; display: grid; place-items: center; width: 420px; height: 420px; }
 .reviewing__entity { position: relative; z-index: 2; width: 250px; height: 250px; display: grid; place-items: center; }
@@ -644,9 +670,9 @@ const priorityColor: Record<string, string> = {
 .reviewing__label {
   position: absolute; bottom: 24%;
   font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 3px;
-  text-transform: uppercase; color: #A7F3D0; text-align: center;
+  text-transform: uppercase; color: var(--accent-2); text-align: center;
 }
-.reviewing__label::after { content: '…'; color: #5EEAD4; }
+.reviewing__label::after { content: '…'; color: var(--accent); }
 
 .phrase-enter-active, .phrase-leave-active { transition: opacity .35s ease, transform .35s ease; }
 .phrase-enter-from { opacity: 0; transform: translateY(6px); }
@@ -657,18 +683,18 @@ const priorityColor: Record<string, string> = {
 
 .iconbtn {
   width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
-  border: 0.5px solid rgba(94,234,212,0.2); background: rgba(8,51,68,0.3);
-  color: rgba(167,243,208,0.7); font-size: 14px; line-height: 1;
+  border: 0.5px solid var(--border-strong); background: var(--surface-2);
+  color: var(--text-muted); font-size: 14px; line-height: 1;
   transition: all .2s ease;
 }
-.iconbtn:hover { color: #5EEAD4; border-color: #5EEAD4; }
-.iconbtn--cu { color: rgba(167,243,208,0.85); border-color: rgba(94,234,212,0.35); }
-.iconbtn--cu:hover { color: #02060A; background: linear-gradient(135deg, #A7F3D0, #5EEAD4); border-color: transparent; }
+.iconbtn:hover { color: var(--accent); border-color: var(--accent); }
+.iconbtn--cu { color: var(--text); border-color: var(--border-strong); }
+.iconbtn--cu:hover { color: var(--bg); background: linear-gradient(135deg, var(--accent-2), var(--accent)); border-color: transparent; }
 
 /* Computer-Use full-screen overlay */
 .cu-overlay {
   position: fixed; inset: 0; z-index: 90;
-  background: rgba(2,6,10,0.86);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(20px);
   display: flex; align-items: stretch; justify-content: center;
   padding: 32px;
@@ -678,7 +704,7 @@ const priorityColor: Record<string, string> = {
   width: min(960px, 100%);
   max-height: 100%;
   border-radius: 18px;
-  border: 0.5px solid rgba(94,234,212,0.18);
+  border: 0.5px solid var(--border-strong);
   box-shadow: 0 30px 80px -20px rgba(0,0,0,0.6);
   overflow: hidden;
 }
@@ -686,15 +712,15 @@ const priorityColor: Record<string, string> = {
 .userpill {
   display: flex; align-items: center; gap: 8px;
   padding: 5px 8px 5px 12px; border-radius: 999px;
-  border: 0.5px solid rgba(94,234,212,0.2); background: rgba(8,51,68,0.3);
+  border: 0.5px solid var(--border-strong); background: var(--surface-2);
 }
-.userpill__dot { width: 7px; height: 7px; border-radius: 50%; background: #5EEAD4; box-shadow: 0 0 8px #5EEAD4; }
+.userpill__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: var(--glow); }
 .userpill__name {
-  font-size: 12px; letter-spacing: 0.5px; color: #DCFCF5; text-transform: capitalize;
+  font-size: 12px; letter-spacing: 0.5px; color: var(--text); text-transform: capitalize;
 }
 .userpill__out {
   border: none; background: transparent; cursor: pointer;
-  color: rgba(167,243,208,0.5); font-size: 13px; padding: 0 2px;
+  color: var(--text-muted); font-size: 13px; padding: 0 2px;
   transition: color .2s ease;
 }
 .userpill__out:hover { color: #F87171; }
@@ -707,16 +733,16 @@ const priorityColor: Record<string, string> = {
   flex: 1;
   display: flex; flex-direction: column; gap: 3px;
   padding: 9px 14px; border-radius: 10px;
-  border: 0.5px solid rgba(94,234,212,0.10);
+  border: 0.5px solid var(--border);
   border-left: 2px solid var(--accent);
-  background: rgba(8,51,68,0.16); backdrop-filter: blur(6px);
+  background: var(--surface); backdrop-filter: blur(6px);
 }
 .hud__label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase;
-  color: rgba(167,243,208,0.5);
+  color: var(--text-muted);
 }
-.hud__value { font-size: 20px; font-weight: 300; color: #ECFEFF; line-height: 1; }
+.hud__value { font-size: 20px; font-weight: 300; color: var(--text-strong); line-height: 1; }
 .hud__value small {
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px; letter-spacing: 1px; color: var(--accent); margin-left: 5px;
@@ -735,8 +761,8 @@ const priorityColor: Record<string, string> = {
   align-items: center; justify-content: space-between;
   padding: 10px 0 4px; text-align: center;
 }
-.greeting { margin: 4px 0 0; font-size: 26px; font-weight: 300; letter-spacing: 0.3px; color: #ECFEFF; }
-.greeting__sub { margin: 8px 0 0; font-size: 13px; color: rgba(167,243,208,0.55); }
+.greeting { margin: 4px 0 0; font-size: 26px; font-weight: 300; letter-spacing: 0.3px; color: var(--text-strong); }
+.greeting__sub { margin: 8px 0 0; font-size: 13px; color: var(--text-muted); }
 
 /* ---- conversation ---- */
 .convo {
@@ -747,16 +773,16 @@ const priorityColor: Record<string, string> = {
 }
 .convo__q {
   margin: 0; align-self: flex-end;
-  font-size: 13px; color: rgba(167,243,208,0.6);
-  border: 0.5px solid rgba(94,234,212,0.18); border-radius: 12px 12px 2px 12px;
-  padding: 7px 12px; background: rgba(8,51,68,0.3); max-width: 80%;
+  font-size: 13px; color: var(--text-muted);
+  border: 0.5px solid var(--border-strong); border-radius: 12px 12px 2px 12px;
+  padding: 7px 12px; background: var(--surface-2); max-width: 80%;
 }
 .convo__a {
   margin: 0; align-self: flex-start; text-align: left;
-  font-size: 15px; line-height: 1.55; color: #ECFEFF; font-weight: 300;
+  font-size: 15px; line-height: 1.55; color: var(--text-strong); font-weight: 300;
   white-space: pre-wrap;
 }
-.convo__cursor { color: #5EEAD4; animation: blink 1s step-start infinite; }
+.convo__cursor { color: var(--accent); animation: blink 1s step-start infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 .entity-hold { flex: 1; display: grid; place-items: center; width: 100%; min-height: 0; }
 .entity-frame { width: min(360px, 70%); }
@@ -766,76 +792,76 @@ const priorityColor: Record<string, string> = {
   width: min(560px, 90%);
   display: flex; align-items: center; gap: 10px;
   padding: 12px 16px; border-radius: 999px;
-  border: 0.5px solid rgba(94,234,212,0.22);
-  background: rgba(8,51,68,0.30); backdrop-filter: blur(8px);
+  border: 0.5px solid var(--border-strong);
+  background: var(--surface-2); backdrop-filter: blur(8px);
 }
-.commandbar__glyph { color: #5EEAD4; font-size: 13px; }
+.commandbar__glyph { color: var(--accent); font-size: 13px; }
 .commandbar__input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: #E2F5F1; font-size: 14px; letter-spacing: 0.3px;
+  color: var(--text); font-size: 14px; letter-spacing: 0.3px;
 }
-.commandbar.busy { border-color: rgba(94,234,212,0.4); box-shadow: 0 0 18px rgba(94,234,212,0.18); }
-.commandbar.listening { border-color: #5EEAD4; box-shadow: 0 0 22px rgba(94,234,212,0.28); }
+.commandbar.busy { border-color: var(--accent); box-shadow: var(--glow); }
+.commandbar.listening { border-color: var(--accent); box-shadow: var(--glow); }
 .cmdbtn {
   display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 50%; border: 0.5px solid rgba(94,234,212,0.25);
-  background: transparent; color: #5EEAD4; cursor: pointer; transition: all .2s ease;
+  border-radius: 50%; border: 0.5px solid var(--border-strong);
+  background: transparent; color: var(--accent); cursor: pointer; transition: all .2s ease;
 }
-.cmdbtn:hover { border-color: #5EEAD4; background: rgba(94,234,212,0.10); }
-.cmdbtn.mic.on { background: #5EEAD4; color: #02060A; border-color: #5EEAD4; animation: micpulse 1.2s ease-in-out infinite; }
-.cmdbtn.mute.off { color: rgba(167,243,208,0.4); border-color: rgba(167,243,208,0.18); }
+.cmdbtn:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cmdbtn.mic.on { background: var(--accent); color: var(--bg); border-color: var(--accent); animation: micpulse 1.2s ease-in-out infinite; }
+.cmdbtn.mute.off { color: var(--text-muted); border-color: var(--border); }
 @keyframes micpulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(94,234,212,0.5); }
   50% { box-shadow: 0 0 0 7px rgba(94,234,212,0); }
 }
 .commandbar__input:disabled { opacity: 0.6; cursor: progress; }
-.commandbar__input::placeholder { color: rgba(167,243,208,0.4); }
+.commandbar__input::placeholder { color: var(--text-muted); }
 .commandbar__hint {
   font-family: 'JetBrains Mono', monospace; font-size: 11px;
-  color: rgba(167,243,208,0.4);
-  border: 0.5px solid rgba(94,234,212,0.2); border-radius: 6px; padding: 1px 6px;
+  color: var(--text-muted);
+  border: 0.5px solid var(--border-strong); border-radius: 6px; padding: 1px 6px;
 }
 
 /* ---- shared list styling ---- */
 .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .list > li {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 2px; border-bottom: 0.5px solid rgba(255,255,255,0.04); font-size: 13px;
+  padding: 9px 2px; border-bottom: 0.5px solid var(--border); font-size: 13px;
 }
 .list > li:last-child { border-bottom: none; }
-.time { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(167,243,208,0.4); white-space: nowrap; }
+.time { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
 /* tasks */
-.task__box { width: 15px; height: 15px; border-radius: 4px; flex-shrink: 0; padding: 0; cursor: pointer; border: 1px solid rgba(94,234,212,0.4); background: transparent; transition: all .15s ease; }
-.task__box:hover { border-color: #5EEAD4; }
-.task__box.checked { background: #5EEAD4; border-color: #5EEAD4; }
+.task__box { width: 15px; height: 15px; border-radius: 4px; flex-shrink: 0; padding: 0; cursor: pointer; border: 1px solid var(--border-strong); background: transparent; transition: all .15s ease; }
+.task__box:hover { border-color: var(--accent); }
+.task__box.checked { background: var(--accent); border-color: var(--accent); }
 .task__main { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.task__text { color: #DCFCF5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.task__list { font-size: 8.5px; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(167,243,208,0.4); }
-.task.done .task__text { color: rgba(167,243,208,0.35); text-decoration: line-through; }
-.task__act { border: none; background: transparent; cursor: pointer; flex-shrink: 0; color: rgba(167,243,208,0.4); font-size: 13px; padding: 0 2px; opacity: 0; transition: all .15s ease; }
+.task__text { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task__list { font-size: 8.5px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); }
+.task.done .task__text { color: var(--text-muted); text-decoration: line-through; }
+.task__act { border: none; background: transparent; cursor: pointer; flex-shrink: 0; color: var(--text-muted); font-size: 13px; padding: 0 2px; opacity: 0; transition: all .15s ease; }
 .task:hover .task__act { opacity: 1; }
-.task__act:hover { color: #5EEAD4; }
+.task__act:hover { color: var(--accent); }
 .task__act.del:hover { color: #F87171; }
-.addtask { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 10px; border-top: 0.5px solid rgba(255,255,255,0.05); }
-.addtask__list { background: rgba(2,6,10,0.5); color: #A7F3D0; cursor: pointer; border: 0.5px solid rgba(94,234,212,0.18); border-radius: 6px; font-size: 10px; padding: 4px 6px; outline: none; }
-.addtask__input { flex: 1; background: transparent; border: none; outline: none; color: #E2F5F1; font-size: 12px; }
-.addtask__input::placeholder { color: rgba(167,243,208,0.35); }
+.addtask { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 10px; border-top: 0.5px solid var(--border); }
+.addtask__list { background: color-mix(in srgb, var(--bg) 50%, transparent); color: var(--accent-2); cursor: pointer; border: 0.5px solid var(--border-strong); border-radius: 6px; font-size: 10px; padding: 4px 6px; outline: none; }
+.addtask__input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-size: 12px; }
+.addtask__input::placeholder { color: var(--text-muted); }
 
 /* commits */
 .commit__icon { color: #A78BFA; font-family: monospace; }
 .commit__main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.commit__msg { color: #DCFCF5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commit__msg { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .commit__repo { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(167,139,250,0.6); }
 
 /* emails */
 .email__dot { width: 7px; height: 7px; border-radius: 50%; background: transparent; flex-shrink: 0; }
-.email__dot.on { background: #5EEAD4; box-shadow: 0 0 8px #5EEAD4; }
+.email__dot.on { background: var(--accent); box-shadow: 0 0 8px #5EEAD4; }
 .email__main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.email__from { color: #DCFCF5; }
-.email.unread .email__from { color: #ECFEFF; font-weight: 500; }
-.email__subject { font-size: 11.5px; color: rgba(167,243,208,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.email__from { color: var(--text); }
+.email.unread .email__from { color: var(--text-strong); font-weight: 500; }
+.email__subject { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ai news */
 .news { align-items: flex-start; }
@@ -846,12 +872,12 @@ const priorityColor: Record<string, string> = {
   border-radius: 999px; padding: 2px 6px; white-space: nowrap; margin-top: 1px;
 }
 .news__main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.news__title { color: #DCFCF5; line-height: 1.3; }
-.news__meta { font-size: 10.5px; color: rgba(167,243,208,0.45); }
+.news__title { color: var(--text); line-height: 1.3; }
+.news__meta { font-size: 10.5px; color: var(--text-muted); }
 
 /* events */
-.event__at { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5EEAD4; width: 40px; }
-.event__label { flex: 1; color: #DCFCF5; }
+.event__at { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); width: 40px; }
+.event__label { flex: 1; color: var(--text); }
 .event__tag {
   font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
   color: #FBBF24; border: 0.5px solid rgba(251,191,36,0.4); border-radius: 999px; padding: 1px 7px;

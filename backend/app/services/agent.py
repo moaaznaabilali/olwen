@@ -38,6 +38,34 @@ _SEARCH_DECL = {
         "query": {"type": "string", "description": "the search query"}}, "required": ["query"]},
 }
 
+# ---- long-term memory tools ----
+_MEMORY_DECLS = [
+    {
+        "name": "remember",
+        "description": (
+            "Save a durable, long-term memory about the user when they share something "
+            "worth keeping for months — a stable preference, a personal fact, an important "
+            "person or project, or how they like to work. Don't save small talk or transient state."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "content": {"type": "string", "description": "One concise sentence about the user, third person."},
+            "type": {"type": "string", "description": "semantic (facts/preferences), episodic (events), or procedural (how they work)."},
+            "subject": {"type": "string", "description": "Short topic key for this fact, e.g. 'employer', 'diet', 'project:olwen'. Lets a newer fact replace an older one on the same subject."},
+            "importance": {"type": "integer", "description": "1-10, how important to remember. Default 7."},
+        }, "required": ["content"]},
+    },
+    {
+        "name": "recall_memory",
+        "description": (
+            "Search everything you've ever remembered about the user — including older, "
+            "superseded facts — to answer 'what did I used to…', 'do you remember…', or to "
+            "ground a reply in their history."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "what to recall"}}, "required": ["query"]},
+    },
+]
+
 # ---- UI action tools ----
 # These let Olwen actually open surfaces inside himself when the user asks.
 # Each one returns a `ui_action` payload that the frontend dispatches. The LLM
@@ -145,6 +173,12 @@ _UI_DECLS = [
         "parameters": {"type": "object", "properties": {}},
     },
     {
+        "name": "read_latest_emails",
+        "description": "Fetch the user's most recent emails and read them back IN CHAT — sender, subject, and a short preview each. Use when the user asks to get/check/read their last email, latest email, newest emails, or what just arrived (and they want the content here, not just to open the inbox).",
+        "parameters": {"type": "object", "properties": {
+            "count": {"type": "integer", "description": "How many recent emails to fetch (default 3, max 10)."}}},
+    },
+    {
         "name": "give_olwen_the_wheel",
         "description": "Hand the user's Mac to Olwen for autonomous control. Olwen will see the screen, decide what to click/type, take a screenshot, look at the result, decide the next step, and repeat until the goal is reached. Use this when the user wants Olwen to actually FINISH a multi-step task on the screen — sending a real WhatsApp/Telegram message to a contact, filling out a form, navigating an app, anything where the one-shot tools above can't solve it. Requires a Claude API key.",
         "parameters": {
@@ -203,6 +237,8 @@ def build_tools(installed_keys: list[str]) -> list[dict]:
         decls.append(_SEARCH_DECL)
     # UI tools are always available — Olwen should always be able to open himself
     decls.extend(_UI_DECLS)
+    # Memory tools are always available — Olwen should always be able to remember/recall.
+    decls.extend(_MEMORY_DECLS)
     return [{"function_declarations": decls}] if decls else []
 
 
@@ -416,6 +452,28 @@ async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -
     if name == "web_search":
         return await _brave_search((args.get("query") or "").strip())
 
+    # ---- long-term memory ----
+    if name == "remember":
+        from app.services.memory import add_memory, gemini_key_for
+        m = await add_memory(
+            user_id=user.id, session=session, content=args.get("content", ""),
+            mem_type=args.get("type", "semantic"), subject=args.get("subject"),
+            importance=int(args.get("importance", 7) or 7),
+            source="user_explicit", gemini_key=gemini_key_for(user),
+        )
+        return {"ok": bool(m), "saved": m.content if m else None,
+                "say": "Got it — I'll remember that."}
+
+    if name == "recall_memory":
+        from app.services.memory import gemini_key_for, recall
+        rows = await recall(session, user.id, args.get("query", ""), gemini_key_for(user),
+                            include_archived=True, limit=8)
+        return {"matches": [
+            {"content": r.content, "subject": r.subject, "type": r.mem_type,
+             "archived": r.superseded_by is not None}
+            for r in rows
+        ]}
+
     # ---- UI tools — return structured `ui_action` payloads the frontend dispatches ----
     if name == "open_terminal":
         cwd = (args.get("cwd") or "").strip() or None
@@ -561,6 +619,26 @@ async def _exec_tool(name: str, args: dict, user: User, session: AsyncSession) -
     if name == "triage_inbox":
         return {"ui_action": "triage_inbox", "ok": True,
                 "say": "Triaging your inbox."}
+
+    if name == "read_latest_emails":
+        from app.api.routes.email import _fetch_for_account, _first_account
+        acc = await _first_account(user.id, session)
+        if acc is None:
+            return {"error": "No email account is connected. Connect one in Settings → Email."}
+        n = max(1, min(int(args.get("count", 3) or 3), 10))
+        try:
+            rows = await _fetch_for_account(acc, session, n)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Couldn't reach the mailbox: {str(exc)[:160]}"}
+        emails = [{
+            "from": (r.get("sender") or "").split("<")[0].strip().strip('"') or r.get("sender", ""),
+            "subject": r.get("subject") or "(no subject)",
+            "preview": (r.get("snippet") or "")[:240],
+            "unread": r.get("unread", False),
+            "date": r.get("date", ""),
+        } for r in rows[:n]]
+        return {"emails": emails, "count": len(emails),
+                "say": "Reading your latest emails." if emails else "Your inbox looks empty."}
 
     if name == "give_olwen_the_wheel":
         goal = (args.get("goal") or "").strip()

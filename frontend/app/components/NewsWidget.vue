@@ -97,19 +97,19 @@ onMounted(load)
   letter-spacing: 1.2px; text-transform: uppercase; transition: all .2s ease;
 }
 .read-cta:hover { background: rgba(34,211,238,0.18); border-color: #22D3EE; box-shadow: 0 0 14px rgba(34,211,238,0.18); }
-.muted { margin: 8px 2px 0; font-size: 12px; color: rgba(167,243,208,0.5); line-height: 1.5; }
+.muted { margin: 8px 2px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 .link { background: transparent; border: none; cursor: pointer; color: #22D3EE; font-size: 12px; padding: 0; }
 .link:hover { text-decoration: underline; }
 
 .list { list-style: none; margin: 0; padding: 0; }
-.row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 2px; border-bottom: 0.5px solid rgba(255,255,255,0.04); }
+.row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 2px; border-bottom: 0.5px solid var(--border); }
 .row:last-child { border-bottom: none; }
 .row__tag { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: #22D3EE; border: 0.5px solid rgba(34,211,238,0.35); border-radius: 999px; padding: 2px 6px; white-space: nowrap; margin-top: 1px; flex-shrink: 0; }
 .row__main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.row__title { color: #DCFCF5; font-size: 12.5px; line-height: 1.3; text-decoration: none; }
-a.row__title:hover { color: #ECFEFF; text-decoration: underline; }
-.row__meta { font-size: 10.5px; color: rgba(167,243,208,0.45); }
-.time { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(167,243,208,0.4); white-space: nowrap; }
+.row__title { color: var(--text); font-size: 12.5px; line-height: 1.3; text-decoration: none; }
+a.row__title:hover { color: var(--text-strong); text-decoration: underline; }
+.row__meta { font-size: 10.5px; color: var(--text-muted); }
+.time { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 
 .skel { display: flex; gap: 9px; padding: 8px 2px; opacity: 0; animation: in .35s ease forwards; animation-delay: var(--d); }
 .skel__tag { width: 36px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, rgba(34,211,238,0.06), rgba(34,211,238,0.25), rgba(34,211,238,0.06)); background-size: 220% 100%; animation: shim 1.5s ease-in-out infinite; flex-shrink: 0; }

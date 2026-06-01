@@ -42,3 +42,24 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_current_user_id(token: Annotated[str, Depends(oauth2_scheme)]) -> uuid.UUID:
+    """Authenticate from the signed JWT WITHOUT opening a DB session. Use this for
+    long-lived / streaming endpoints (e.g. SSE), where holding a session for the
+    request's whole lifetime would keep a transaction open and block migrations."""
+    exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "access" or payload.get("sub") is None:
+            raise exc
+        return uuid.UUID(str(payload["sub"]))
+    except (jwt.PyJWTError, ValueError):
+        raise exc
+
+
+CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]

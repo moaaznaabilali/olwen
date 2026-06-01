@@ -16,7 +16,10 @@ withDefaults(defineProps<{
   <section class="panel" :style="{ '--accent': accent }">
     <header class="panel__head">
       <span class="panel__title">{{ title }}</span>
-      <span v-if="badge !== undefined" class="panel__badge">{{ badge }}</span>
+      <span class="panel__right">
+        <span v-if="badge !== undefined" class="panel__badge">{{ badge }}</span>
+        <slot name="actions" />
+      </span>
     </header>
     <div class="panel__body">
       <slot />
@@ -30,8 +33,8 @@ withDefaults(defineProps<{
   flex-direction: column;
   min-height: 0;
   border-radius: 12px;
-  border: 0.5px solid rgba(94, 234, 212, 0.12);
-  background: rgba(8, 51, 68, 0.18);
+  border: 0.5px solid var(--border);
+  background: var(--surface);
   backdrop-filter: blur(8px);
   overflow: hidden;
 }
@@ -40,8 +43,9 @@ withDefaults(defineProps<{
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 0.5px solid rgba(94, 234, 212, 0.10);
+  border-bottom: 0.5px solid var(--border);
 }
+.panel__right { display: inline-flex; align-items: center; gap: 8px; }
 .panel__title {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 10.5px;
@@ -67,7 +71,7 @@ withDefaults(defineProps<{
 /* slim scrollbar */
 .panel__body::-webkit-scrollbar { width: 5px; }
 .panel__body::-webkit-scrollbar-thumb {
-  background: rgba(94, 234, 212, 0.2);
+  background: var(--border-strong);
   border-radius: 3px;
 }
 </style>

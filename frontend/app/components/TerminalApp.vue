@@ -223,23 +223,23 @@ onBeforeUnmount(() => {
 .tools { display: flex; align-items: center; gap: 8px; margin-left: 14px; }
 .status {
   font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.3px;
-  text-transform: uppercase; color: rgba(167,243,208,0.5);
-  padding: 3px 8px; border-radius: 999px; border: 0.5px solid rgba(167,243,208,0.2);
+  text-transform: uppercase; color: var(--text-muted);
+  padding: 3px 8px; border-radius: 999px; border: 0.5px solid var(--text-muted);
 }
-.status.on { color: #5EEAD4; border-color: rgba(94,234,212,0.45); background: rgba(94,234,212,0.06); }
+.status.on { color: var(--accent); border-color: var(--border-strong); background: var(--border); }
 
 .tool {
   padding: 5px 10px; border-radius: 999px; cursor: pointer;
-  border: 0.5px solid rgba(94,234,212,0.3); background: rgba(94,234,212,0.06);
-  color: #A7F3D0; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  border: 0.5px solid var(--border-strong); background: var(--border);
+  color: var(--accent-2); font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
   letter-spacing: 1.1px; text-transform: uppercase;
 }
-.tool:hover { background: rgba(94,234,212,0.16); color: #ECFEFF; border-color: #5EEAD4; }
+.tool:hover { background: var(--border-strong); color: var(--text-strong); border-color: var(--accent); }
 
-.term { width: 100%; height: 100%; padding: 8px 4px 0 10px; box-sizing: border-box; background: #02060A; }
+.term { width: 100%; height: 100%; padding: 8px 4px 0 10px; box-sizing: border-box; background: var(--bg); }
 
 /* Embedded mode — fill the host window, slim toolbar, no chrome. */
-.term-embed { display: flex; flex-direction: column; width: 100%; height: 100%; background: #02060A; }
-.embed-tools { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid rgba(94,234,212,0.12); flex-shrink: 0; }
+.term-embed { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--bg); }
+.embed-tools { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .term-embed .term { flex: 1; height: auto; min-height: 0; }
 </style>

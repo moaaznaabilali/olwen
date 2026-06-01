@@ -258,10 +258,10 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex; flex-direction: column;
   height: 100%; min-height: 0;
-  color: #F8FAFC;
+  color: var(--text);
   background:
     radial-gradient(ellipse 800px 500px at 80% -10%, rgba(94,234,212,0.06), transparent 60%),
-    #02060A;
+    var(--bg);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -304,7 +304,7 @@ onBeforeUnmount(() => {
 }
 .cu__dot {
   width: 8px; height: 8px; border-radius: 50%;
-  background: #5EEAD4;
+  background: var(--accent);
   box-shadow: 0 0 12px #5EEAD4;
   animation: cuPulse 2.5s ease-in-out infinite;
 }
@@ -312,17 +312,17 @@ onBeforeUnmount(() => {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 9.5px; letter-spacing: 2px; text-transform: uppercase;
   padding: 3px 8px; border-radius: 4px;
-  color: #A7F3D0;
+  color: var(--accent-2);
   background: rgba(167,243,208,0.08);
-  border: 0.5px solid rgba(167,243,208,0.3);
+  border: 0.5px solid var(--border-strong);
 }
 .cu__close {
   background: transparent; border: none;
-  color: #94A3B8; font-size: 28px; line-height: 1;
+  color: var(--text-muted); font-size: 28px; line-height: 1;
   cursor: pointer; padding: 0 4px;
   transition: color .15s ease;
 }
-.cu__close:hover { color: #F8FAFC; }
+.cu__close:hover { color: var(--text-strong); }
 
 /* ── status banner ────────────────────────────────────────── */
 .cu__banner {
@@ -333,7 +333,7 @@ onBeforeUnmount(() => {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11.5px; letter-spacing: 0.5px;
 }
-.cu__banner--mute { color: #94A3B8; background: rgba(148,163,184,0.06); }
+.cu__banner--mute { color: var(--text-muted); background: rgba(148,163,184,0.06); }
 .cu__banner--warn {
   color: #FBBF24;
   background: rgba(251,191,36,0.08);
@@ -341,12 +341,12 @@ onBeforeUnmount(() => {
 }
 .cu__banner--warn code {
   background: rgba(0,0,0,0.35); padding: 3px 8px; border-radius: 4px;
-  color: #A7F3D0;
+  color: var(--accent-2);
 }
 .cu__banner--ok {
-  color: #A7F3D0;
+  color: var(--accent-2);
   background: rgba(94,234,212,0.06);
-  border: 0.5px solid rgba(94,234,212,0.18);
+  border: 0.5px solid var(--border-strong);
 }
 
 /* ── live screen preview ──────────────────────────────────── */
@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
 .cu__shot {
   position: relative;
   border-radius: 14px; overflow: hidden;
-  border: 0.5px solid rgba(94,234,212,0.18);
+  border: 0.5px solid var(--border-strong);
   background: #04101A;
   aspect-ratio: 16/10;
   display: flex; align-items: center; justify-content: center;
@@ -369,7 +369,7 @@ onBeforeUnmount(() => {
 }
 .cu__shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .cu__shot-empty {
-  color: #64748B;
+  color: var(--text-muted);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px; letter-spacing: 1.5px;
 }
@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
   display: flex; gap: 8px; justify-content: flex-end;
   margin-top: 8px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10.5px; color: #64748B; letter-spacing: 1.5px;
+  font-size: 10.5px; color: var(--text-muted); letter-spacing: 1.5px;
 }
 
 /* ── prompt form ──────────────────────────────────────────── */
@@ -388,17 +388,17 @@ onBeforeUnmount(() => {
 .cu__input {
   flex: 1; resize: none;
   padding: 12px 14px;
-  background: rgba(2,6,10,0.6);
-  border: 0.5px solid rgba(94,234,212,0.2);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border-strong);
   border-radius: 10px;
-  color: #F8FAFC;
+  color: var(--text-strong);
   font-family: 'Instrument Serif', Georgia, serif;
   font-size: 15px; line-height: 1.5;
   outline: none;
   transition: border-color .15s ease;
 }
 .cu__input:focus { border-color: rgba(94,234,212,0.55); }
-.cu__input::placeholder { color: rgba(148,163,184,0.55); font-style: italic; }
+.cu__input::placeholder { color: var(--text-muted); font-style: italic; }
 .cu__input:disabled { opacity: 0.5; }
 
 .cu__go {
@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, #A7F3D0, #5EEAD4);
   border: none;
   border-radius: 10px;
-  color: #02060A;
+  color: var(--bg);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600;
   cursor: pointer;
@@ -423,7 +423,7 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column; gap: 8px;
 }
 .cu__log-empty {
-  color: #64748B;
+  color: var(--text-muted);
   font-family: 'Instrument Serif', Georgia, serif;
   font-style: italic;
   font-size: 14px; line-height: 1.55;
@@ -432,7 +432,7 @@ onBeforeUnmount(() => {
 .cu__log-empty-hint {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 10.5px; letter-spacing: 1.5px;
-  color: #5EEAD4; opacity: 0.6;
+  color: var(--accent); opacity: 0.6;
   margin-top: 8px; font-style: normal;
 }
 .cu__log-row {
@@ -448,16 +448,16 @@ onBeforeUnmount(() => {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 9.5px; letter-spacing: 1.8px; text-transform: uppercase;
   padding: 2px 7px; border-radius: 3px;
-  color: #64748B;
+  color: var(--text-muted);
   background: rgba(148,163,184,0.08);
 }
-.cu__log-row--thought    .cu__log-tag { color: #A7F3D0; background: rgba(167,243,208,0.08); }
+.cu__log-row--thought    .cu__log-tag { color: var(--accent-2); background: rgba(167,243,208,0.08); }
 .cu__log-row--action     .cu__log-tag { color: #67E8F9; background: rgba(103,232,249,0.1); }
-.cu__log-row--done       .cu__log-tag { color: #5EEAD4; background: rgba(94,234,212,0.12); }
+.cu__log-row--done       .cu__log-tag { color: var(--accent); background: rgba(94,234,212,0.12); }
 .cu__log-row--error      .cu__log-tag { color: #FCA5A5; background: rgba(252,165,165,0.1); }
 
-.cu__log-text   { color: #CBD5E1; font-family: 'Instrument Serif', Georgia, serif; font-style: italic; }
-.cu__log-action { color: #F8FAFC; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; }
-.cu__log-done   { color: #A7F3D0; font-weight: 500; }
+.cu__log-text   { color: var(--text); font-family: 'Instrument Serif', Georgia, serif; font-style: italic; }
+.cu__log-action { color: var(--text-strong); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; }
+.cu__log-done   { color: var(--accent-2); font-weight: 500; }
 .cu__log-error  { color: #FCA5A5; }
 </style>

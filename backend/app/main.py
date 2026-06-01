@@ -17,6 +17,8 @@ from app.api.routes import (
     health,
     memory as memory_routes,
     news as news_routes,
+    notifications as notification_routes,
+    scheduled_tasks as schedule_routes,
     settings as settings_routes,
     skills as skills_routes,
     strava as strava_routes,
@@ -37,13 +39,19 @@ async def lifespan(app: FastAPI):
     # WhatsApp replies to "needs_you" jobs.
     import asyncio as _aio
     from app.services.job_runner import redispatch_queued, whatsapp_reply_poller
+    from app.services.notifications import email_notify_poller
+    from app.services.scheduler import scheduler_loop
     from app.services.telegram_bot import telegram_poller
     await redispatch_queued()
     _poller = _aio.create_task(whatsapp_reply_poller())
     _tg = _aio.create_task(telegram_poller())
+    _sched = _aio.create_task(scheduler_loop())
+    _mail = _aio.create_task(email_notify_poller())
     yield
     _poller.cancel()
     _tg.cancel()
+    _sched.cancel()
+    _mail.cancel()
 
 
 app = FastAPI(title=f"{settings.app_name} API", version="0.1.0", lifespan=lifespan)
@@ -75,6 +83,8 @@ app.include_router(apps_routes.router, prefix="/api/apps", tags=["apps"])
 app.include_router(devmode_routes.router, prefix="/api/devmode", tags=["devmode"])
 app.include_router(computer_routes.router, prefix="/api/computer", tags=["computer"])
 app.include_router(telegram_routes.router, prefix="/api/telegram", tags=["telegram"])
+app.include_router(schedule_routes.router, prefix="/api/schedules", tags=["schedules"])
+app.include_router(notification_routes.router, prefix="/api/notifications", tags=["notifications"])
 
 
 @app.get("/")

@@ -1,4 +1,5 @@
 """Chat with Olwen — streamed over SSE."""
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
@@ -12,8 +13,14 @@ from app.api.deps import CurrentUser, SessionDep
 from app.core.config import settings
 from app.core.security import decrypt_secret
 from app.models.installed_skill import InstalledSkill
-from app.models.memory import Memory
 from app.services.agent import build_tools, run_agent, stream_text
+from app.services.memory import (
+    add_memory,
+    backfill_embeddings,
+    build_memory_context,
+    extract_memories_bg,
+    gemini_key_for,
+)
 from app.services.olwen_ai import _build_system, stream_reply
 from app.services.skills import catalog_by_key
 
@@ -34,6 +41,8 @@ _AGENT_INTENT = re.compile(
     # opening any native macOS app — generic "open/launch/start <something>"
     r"|\b(open|launch|start)\s+\S{2,}"
     r"|\b(write|send|compose|reply|text|dm)\s+(an?\s+)?(email|mess?age|msg|whats\s*app|tele\s*gram|wa|tg|sms)\b"
+    # reading email: "get my last email", "check inbox", "any new emails", "read my mail"
+    r"|\b(get|check|read|show|see|pull|grab|fetch|open|triage|any|new|last|latest|recent)\b[^.\n]{0,24}\b(e-?mails?|inbox|mailbox|mail)\b"
     r"|\b(mess?age|whats\s*app|tele\s*gram|wa|tg)\b.*\b(me|him|her|them|to|say|saying|that)\b"
     r"|\b(send|text|tell)\b.*\b(whats\s*app|tele\s*gram|message|mesage)\b"
     r"|\b(begin|start)\s+work(ing)?\b"
@@ -85,19 +94,22 @@ def _sse(event: dict) -> str:
 async def chat_stream(data: ChatRequest, user: CurrentUser, session: SessionDep) -> StreamingResponse:
     history = [{"role": m.role, "content": m.content} for m in data.history]
 
-    # "remember …" → save a memory immediately (no extra AI call)
+    # Gemini key powers embeddings + auto-extraction (independent of chat provider).
+    mem_key = gemini_key_for(user)
+
+    # "remember …" → save an explicit, high-importance memory (supersedes prior).
     m = _REMEMBER.match(data.message)
     if m:
         fact = m.group(1).strip().rstrip(".")
         if fact:
-            session.add(Memory(user_id=user.id, content=fact[:500]))
-            await session.commit()
+            await add_memory(
+                session, user.id, fact[:1000],
+                mem_type="semantic", importance=8, source="user_explicit", gemini_key=mem_key,
+            )
 
-    # Load what Olwen knows about this user (compact, injected into the prompt).
-    rows = await session.scalars(
-        select(Memory).where(Memory.user_id == user.id).order_by(Memory.created_at.desc()).limit(40)
-    )
-    memories = [r.content for r in rows]
+    # Retrieve the RELEVANT subset of memory (core identity + query-matched),
+    # not the whole pile — ranked by meaning + recency + importance.
+    memories = await build_memory_context(session, user.id, data.message, mem_key)
 
     # Installed skills → Olwen is aware of them.
     installed_keys = list(await session.scalars(
@@ -153,6 +165,12 @@ async def chat_stream(data: ChatRequest, user: CurrentUser, session: SessionDep)
                 ):
                     yield _sse({"type": "delta", "text": delta})
             yield _sse({"type": "done"})
+            # Off the hot path: mine durable facts from this turn, and backfill
+            # embeddings for any legacy memories that lack them. Fire-and-forget.
+            if mem_key:
+                turns = history + [{"role": "user", "content": data.message}]
+                asyncio.create_task(extract_memories_bg(user.id, turns, mem_key))
+                asyncio.create_task(backfill_embeddings(user.id, mem_key))
         except Exception as exc:  # surface a clean error to the client
             yield _sse({"type": "error", "message": str(exc)})
 

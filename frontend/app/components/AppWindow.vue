@@ -107,8 +107,8 @@ const style = computed(() => maxed.value
   position: fixed;
   display: flex; flex-direction: column;
   border-radius: 14px; overflow: hidden;
-  background: rgba(8, 30, 38, 0.92);
-  border: 0.5px solid rgba(94,234,212,0.25);
+  background: var(--surface-solid);
+  border: 0.5px solid var(--border-strong);
   box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(94,234,212,0.06), 0 0 36px rgba(94,234,212,0.08);
   backdrop-filter: blur(18px);
 }
@@ -118,28 +118,28 @@ const style = computed(() => maxed.value
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px;
   background: linear-gradient(180deg, rgba(94,234,212,0.08), rgba(94,234,212,0));
-  border-bottom: 0.5px solid rgba(94,234,212,0.18);
+  border-bottom: 0.5px solid var(--border-strong);
   user-select: none;
 }
 .win__drag { display: flex; align-items: center; gap: 10px; cursor: grab; padding: 4px 0; }
 .win__drag:active { cursor: grabbing; }
 .win__glyph {
   width: 22px; height: 22px; display: grid; place-items: center;
-  border-radius: 6px; background: rgba(2,6,10,0.5); border: 0.5px solid var(--c);
+  border-radius: 6px; background: color-mix(in srgb, var(--bg) 50%, transparent); border: 0.5px solid var(--c);
   color: var(--c); font-size: 12px;
 }
-.win__title { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; color: #ECFEFF; }
+.win__title { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-strong); }
 .win__btns { margin-left: auto; display: flex; gap: 4px; }
 .win__btn {
   width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
-  border: 0.5px solid rgba(167,243,208,0.18); background: transparent;
-  color: rgba(167,243,208,0.6); cursor: pointer; font-size: 11px;
+  border: 0.5px solid var(--text-muted); background: transparent;
+  color: var(--text-muted); cursor: pointer; font-size: 11px;
   transition: all .15s ease;
 }
-.win__btn:hover { border-color: #5EEAD4; color: #ECFEFF; }
+.win__btn:hover { border-color: var(--accent); color: var(--text-strong); }
 .win__btn--x:hover { border-color: #F87171; color: #FCA5A5; }
 
-.win__body { flex: 1; min-height: 0; overflow: hidden; background: #02060A; }
+.win__body { flex: 1; min-height: 0; overflow: hidden; background: var(--bg); }
 
 .win__resize {
   position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;

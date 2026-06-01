@@ -51,8 +51,8 @@ onMounted(() => { loadCatalog() })
 .dock {
   display: flex; gap: 10px;
   padding: 10px 12px; border-radius: 18px;
-  background: rgba(8,30,38,0.85); backdrop-filter: blur(18px);
-  border: 0.5px solid rgba(94,234,212,0.22);
+  background: var(--surface-solid); backdrop-filter: blur(18px);
+  border: 0.5px solid var(--border-strong);
   box-shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 28px rgba(94,234,212,0.1);
 }
 
@@ -60,21 +60,21 @@ onMounted(() => { loadCatalog() })
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   width: 76px; padding: 10px 8px; border-radius: 12px; cursor: pointer;
-  border: 0.5px solid rgba(94,234,212,0.16); background: rgba(2,6,10,0.5);
+  border: 0.5px solid var(--border-strong); background: color-mix(in srgb, var(--bg) 50%, transparent);
   transition: all .2s ease;
 }
-.tile:hover { border-color: var(--c, #5EEAD4); transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0,0,0,0.4), 0 0 22px color-mix(in srgb, var(--c, #5EEAD4) 35%, transparent); }
-.tile.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, rgba(2,6,10,0.5)); }
+.tile:hover { border-color: var(--c, var(--accent)); transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0,0,0,0.4), 0 0 22px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent); }
+.tile.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, color-mix(in srgb, var(--bg) 50%, transparent)); }
 .tile.disabled { opacity: 0.45; cursor: not-allowed; }
 .tile.disabled:hover { transform: none; box-shadow: none; }
 
 .tile__glyph {
   width: 38px; height: 38px; display: grid; place-items: center;
-  border-radius: 10px; background: color-mix(in srgb, var(--c) 14%, rgba(2,6,10,0.6));
+  border-radius: 10px; background: color-mix(in srgb, var(--c) 14%, color-mix(in srgb, var(--bg) 60%, transparent));
   border: 0.5px solid color-mix(in srgb, var(--c) 32%, transparent);
   color: var(--c); font-size: 19px; line-height: 1;
 }
-.tile__name { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #DCFCF5; }
+.tile__name { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--text); }
 .tile__chip {
   position: absolute; top: -6px; right: -6px;
   font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
@@ -85,19 +85,19 @@ onMounted(() => { loadCatalog() })
   position: relative;
   width: 46px; height: 46px; border-radius: 999px;
   display: grid; place-items: center; cursor: pointer;
-  border: 0.5px solid rgba(94,234,212,0.3);
-  background: rgba(8,30,38,0.85); backdrop-filter: blur(18px);
-  color: #5EEAD4;
+  border: 0.5px solid var(--border-strong);
+  background: var(--surface-solid); backdrop-filter: blur(18px);
+  color: var(--accent);
   box-shadow: 0 12px 32px rgba(0,0,0,0.4), 0 0 18px rgba(94,234,212,0.15);
   transition: all .2s ease;
 }
-.trigger:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(0,0,0,0.5), 0 0 28px rgba(94,234,212,0.25); border-color: #5EEAD4; color: #ECFEFF; }
-.trigger.open { background: #5EEAD4; color: #02060A; border-color: #5EEAD4; box-shadow: 0 0 24px rgba(94,234,212,0.5); }
+.trigger:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(0,0,0,0.5), 0 0 28px rgba(94,234,212,0.25); border-color: var(--accent); color: var(--text-strong); }
+.trigger.open { background: var(--accent); color: var(--bg); border-color: var(--accent); box-shadow: 0 0 24px rgba(94,234,212,0.5); }
 .trigger__glyph { font-size: 19px; line-height: 1; }
 .trigger__count {
   position: absolute; top: -3px; right: -3px;
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-  background: #F472B6; color: #02060A;
+  background: #F472B6; color: var(--bg);
   font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
   display: grid; place-items: center;
 }

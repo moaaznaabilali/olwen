@@ -223,22 +223,22 @@ async function resend() {
   gap: 14px;
   padding: 28px;
   border-radius: 16px;
-  border: 0.5px solid rgba(94, 234, 212, 0.16);
-  background: rgba(8, 51, 68, 0.28);
+  border: 0.5px solid var(--border-strong);
+  background: var(--surface-2);
   backdrop-filter: blur(14px);
 }
 .card__head { display: flex; align-items: baseline; gap: 10px; justify-content: center; }
 .brand {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  letter-spacing: 4px; font-size: 16px; color: #5EEAD4;
+  letter-spacing: 4px; font-size: 16px; color: var(--accent);
 }
-.brand__sub { font-size: 10px; letter-spacing: 1.5px; color: rgba(167, 243, 208, 0.4); }
+.brand__sub { font-size: 10px; letter-spacing: 1.5px; color: var(--text-muted); }
 .card__title {
   margin: 2px 0 0; text-align: center;
-  font-size: 18px; font-weight: 300; color: #ECFEFF;
+  font-size: 18px; font-weight: 300; color: var(--text-strong);
 }
-.card__hint { margin: 0; text-align: center; font-size: 12px; color: rgba(167, 243, 208, 0.55); }
-.card__hint b { color: #A7F3D0; font-weight: 500; }
+.card__hint { margin: 0; text-align: center; font-size: 12px; color: var(--text-muted); }
+.card__hint b { color: var(--accent-2); font-weight: 500; }
 
 .devcode {
   margin: 0; text-align: center; font-size: 11px;
@@ -251,17 +251,17 @@ async function resend() {
 .field__label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase;
-  color: rgba(167, 243, 208, 0.5);
+  color: var(--text-muted);
 }
 .field input {
   padding: 11px 13px; border-radius: 9px;
-  border: 0.5px solid rgba(94, 234, 212, 0.18);
-  background: rgba(2, 6, 10, 0.4);
-  color: #E2F5F1; font-size: 14px; outline: none;
+  border: 0.5px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  color: var(--text); font-size: 14px; outline: none;
   transition: border-color .2s ease;
 }
-.field input:focus { border-color: #5EEAD4; }
-.field input::placeholder { color: rgba(167, 243, 208, 0.3); }
+.field input:focus { border-color: var(--accent); }
+.field input::placeholder { color: var(--text-muted); }
 .code-input {
   text-align: center; letter-spacing: 10px; font-size: 22px;
   font-family: 'JetBrains Mono', monospace;
@@ -274,17 +274,17 @@ async function resend() {
 
 .submit {
   margin-top: 4px; padding: 12px; border-radius: 9px; cursor: pointer;
-  border: 0.5px solid #5EEAD4;
-  background: rgba(94, 234, 212, 0.16); color: #ECFEFF;
+  border: 0.5px solid var(--accent);
+  background: var(--border-strong); color: var(--text-strong);
   font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase;
   transition: all .2s ease;
 }
-.submit:hover:not(:disabled) { background: rgba(94, 234, 212, 0.26); box-shadow: 0 0 18px rgba(94, 234, 212, 0.25); }
+.submit:hover:not(:disabled) { background: var(--border-strong); box-shadow: 0 0 18px rgba(94, 234, 212, 0.25); }
 .submit:disabled { opacity: 0.6; cursor: progress; }
 
-.switch { margin: 4px 0 0; text-align: center; font-size: 12px; color: rgba(167, 243, 208, 0.5); }
+.switch { margin: 4px 0 0; text-align: center; font-size: 12px; color: var(--text-muted); }
 .switch__btn {
   border: none; background: transparent; cursor: pointer;
-  color: #5EEAD4; font-size: 12px; text-decoration: underline; padding: 0 2px;
+  color: var(--accent); font-size: 12px; text-decoration: underline; padding: 0 2px;
 }
 </style>

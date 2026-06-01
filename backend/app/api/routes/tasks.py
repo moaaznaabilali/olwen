@@ -3,16 +3,18 @@ import json
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.security import decrypt_secret
 from app.models.task import Task, TaskList
 from app.models.user import User
 from app.schemas.task import (
+    ListReorder,
     TaskCreate,
     TaskListCreate,
     TaskListRead,
+    TaskListUpdate,
     TaskRead,
     TaskUpdate,
 )
@@ -78,7 +80,9 @@ async def _ensure_seed(user_id: uuid.UUID, session: SessionDep) -> None:
 async def _to_read(task: Task, list_name: str) -> TaskRead:
     return TaskRead(
         id=task.id, list_id=task.list_id, list_name=list_name,
-        text=task.text, priority=task.priority, done=task.done, created_at=task.created_at,
+        text=task.text, priority=task.priority, done=task.done,
+        due_date=task.due_date, tags=list(task.tags or []),
+        created_at=task.created_at,
     )
 
 
@@ -86,18 +90,81 @@ async def _to_read(task: Task, list_name: str) -> TaskRead:
 async def get_lists(user: CurrentUser, session: SessionDep) -> list[TaskList]:
     await _ensure_seed(user.id, session)
     rows = await session.scalars(
-        select(TaskList).where(TaskList.user_id == user.id).order_by(TaskList.created_at)
+        select(TaskList)
+        .where(TaskList.user_id == user.id)
+        .order_by(TaskList.position, TaskList.created_at)
     )
     return list(rows)
 
 
+async def _owned_list(list_id: uuid.UUID, user_id: uuid.UUID, session: SessionDep) -> TaskList:
+    tl = await session.get(TaskList, list_id)
+    if tl is None or tl.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="List not found.")
+    return tl
+
+
 @router.post("/lists", response_model=TaskListRead, status_code=status.HTTP_201_CREATED)
 async def create_list(data: TaskListCreate, user: CurrentUser, session: SessionDep) -> TaskList:
-    tl = TaskList(user_id=user.id, name=data.name)
+    top = await session.scalar(
+        select(func.max(TaskList.position)).where(TaskList.user_id == user.id)
+    )
+    tl = TaskList(user_id=user.id, name=data.name, position=(top or 0) + 1)
     session.add(tl)
     await session.commit()
     await session.refresh(tl)
     return tl
+
+
+@router.patch("/lists/{list_id}", response_model=TaskListRead)
+async def update_list(
+    list_id: uuid.UUID, data: TaskListUpdate, user: CurrentUser, session: SessionDep
+) -> TaskList:
+    tl = await _owned_list(list_id, user.id, session)
+    if data.name is not None:
+        tl.name = data.name
+    if data.position is not None:
+        tl.position = data.position
+    if data.pos_x is not None:
+        tl.pos_x = data.pos_x
+    if data.pos_y is not None:
+        tl.pos_y = data.pos_y
+    if data.width is not None:
+        tl.width = data.width
+    if data.collapsed is not None:
+        tl.collapsed = data.collapsed
+    await session.commit()
+    await session.refresh(tl)
+    return tl
+
+
+@router.delete("/lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_list(list_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
+    tl = await _owned_list(list_id, user.id, session)
+    await session.delete(tl)  # tasks cascade via FK ondelete=CASCADE
+    await session.commit()
+
+
+@router.post("/lists/reorder", response_model=list[TaskListRead])
+async def reorder_lists(
+    data: ListReorder, user: CurrentUser, session: SessionDep
+) -> list[TaskList]:
+    """Persist a new column order. Body is the full ordered list of list ids."""
+    owned = await session.scalars(
+        select(TaskList).where(TaskList.user_id == user.id)
+    )
+    by_id = {tl.id: tl for tl in owned}
+    for idx, lid in enumerate(data.ids):
+        tl = by_id.get(lid)
+        if tl is not None:
+            tl.position = idx
+    await session.commit()
+    rows = await session.scalars(
+        select(TaskList)
+        .where(TaskList.user_id == user.id)
+        .order_by(TaskList.position, TaskList.created_at)
+    )
+    return list(rows)
 
 
 @router.get("", response_model=list[TaskRead])
@@ -110,7 +177,7 @@ async def get_tasks(
         select(Task, TaskList.name)
         .join(TaskList, Task.list_id == TaskList.id)
         .where(Task.user_id == user.id)
-        .order_by(Task.done, TaskList.created_at, Task.created_at)
+        .order_by(Task.done, TaskList.position, TaskList.created_at, Task.created_at)
     )
     if list_id is not None:
         stmt = stmt.where(Task.list_id == list_id)
@@ -124,7 +191,10 @@ async def create_task(data: TaskCreate, user: CurrentUser, session: SessionDep) 
     if tl is None or tl.user_id != user.id:
         raise HTTPException(status_code=404, detail="List not found")
     priority = data.priority if data.priority in _PRIORITIES else "med"
-    task = Task(user_id=user.id, list_id=data.list_id, text=data.text, priority=priority)
+    task = Task(
+        user_id=user.id, list_id=data.list_id, text=data.text, priority=priority,
+        due_date=data.due_date, tags=(data.tags or None),
+    )
     session.add(task)
     await session.commit()
     await session.refresh(task)
@@ -149,6 +219,15 @@ async def update_task(
         task.priority = data.priority
     if data.done is not None:
         task.done = data.done
+    if data.list_id is not None and data.list_id != task.list_id:
+        await _owned_list(data.list_id, user.id, session)  # verify target is the user's
+        task.list_id = data.list_id
+    if data.clear_due:
+        task.due_date = None
+    elif data.due_date is not None:
+        task.due_date = data.due_date
+    if data.tags is not None:
+        task.tags = data.tags or None
     await session.commit()
     await session.refresh(task)
     tl = await session.get(TaskList, task.list_id)

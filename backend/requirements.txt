@@ -12,3 +12,5 @@ anthropic>=0.40
 cryptography>=43
 imap-tools>=1.6
 aiosmtplib>=3.0
+pgvector>=0.4
+croniter>=6.0

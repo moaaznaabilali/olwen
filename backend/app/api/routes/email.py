@@ -81,7 +81,10 @@ async def _fetch_for_account(acc: EmailAccount, session: SessionDep, limit: int)
         # refresh if expired (or no expiry recorded)
         needs_refresh = acc.token_expiry is None or acc.token_expiry <= dt.datetime.now(dt.timezone.utc)
         if needs_refresh and acc.refresh_token_enc:
-            tokens = await google_oauth.refresh_access(decrypt_secret(acc.refresh_token_enc))
+            _cid, _csec = await app_cfg.google_creds(session)
+            tokens = await google_oauth.refresh_access(
+                decrypt_secret(acc.refresh_token_enc), client_id=_cid, client_secret=_csec
+            )
             access = tokens["access_token"]
             acc.access_token_enc = encrypt_secret(access)
             acc.token_expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
@@ -157,6 +160,14 @@ async def inbox(user: CurrentUser, session: SessionDep, limit: int = 12) -> list
             raise HTTPException(
                 status_code=409,
                 detail=f"GMAIL_FORBIDDEN: Google rejected the request. Re-authenticate the account and make sure Gmail API is enabled. ({body[:200]})",
+            ) from exc
+        # A failed token refresh (revoked/expired refresh token, or missing client
+        # creds) comes back from the OAuth token endpoint as 400/401 with one of
+        # these error codes. Tell the user to reconnect rather than show a raw 5xx.
+        if code in (400, 401) and ("invalid_grant" in body or "invalid_request" in body or "unauthorized_client" in body):
+            raise HTTPException(
+                status_code=409,
+                detail="GOOGLE_REAUTH: Your Google sign-in expired. Reconnect your Google account to keep reading email.",
             ) from exc
         raise HTTPException(status_code=502, detail=f"Upstream Gmail error {code}.") from exc
     return [EmailMessage(**r) for r in rows]
@@ -240,7 +251,10 @@ async def _fetch_one_for_account(acc: EmailAccount, session: SessionDep, uid: st
         access = decrypt_secret(acc.access_token_enc)
         needs_refresh = acc.token_expiry is None or acc.token_expiry <= dt.datetime.now(dt.timezone.utc)
         if needs_refresh and acc.refresh_token_enc:
-            tokens = await google_oauth.refresh_access(decrypt_secret(acc.refresh_token_enc))
+            _cid, _csec = await app_cfg.google_creds(session)
+            tokens = await google_oauth.refresh_access(
+                decrypt_secret(acc.refresh_token_enc), client_id=_cid, client_secret=_csec
+            )
             access = tokens["access_token"]
             acc.access_token_enc = encrypt_secret(access)
             acc.token_expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
@@ -543,7 +557,10 @@ async def _mark_read_for_account(acc: EmailAccount, session: SessionDep, uid: st
         if acc.token_expiry is None or acc.token_expiry <= dt.datetime.now(dt.timezone.utc):
             if not acc.refresh_token_enc:
                 return False
-            tokens = await google_oauth.refresh_access(decrypt_secret(acc.refresh_token_enc))
+            _cid, _csec = await app_cfg.google_creds(session)
+            tokens = await google_oauth.refresh_access(
+                decrypt_secret(acc.refresh_token_enc), client_id=_cid, client_secret=_csec
+            )
             access = tokens["access_token"]
             acc.access_token_enc = encrypt_secret(access)
             acc.token_expiry = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
